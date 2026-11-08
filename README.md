@@ -55,10 +55,10 @@ uv run python -m tools.bench_render
 - `tools.region_map` — плоская карта модели с сеткой. Помогает править `globe_quiz/data/regions.json`.
 - `tools.bench_render` — замер скорости отрисовки.
 
-Вопросы хранятся в `globe_quiz/data/levels.json`, контуры объектов — в `globe_quiz/data/regions.json`.
+Вопросы хранятся в `globe_quiz/data/levels.json`, контуры объектов — в `globe_quiz/data/regions.json`. Контуры островов, которых нет в модели, лежат в `globe_quiz/data/islands.json`: острова строятся при загрузке (`globe_quiz/islands.py`), а файлы в `assets/` не меняются.
 
 ## Модель Земли
 
-3D-модель «[Low Poly Planet Earth](https://sketchfab.com/3d-models/low-poly-planet-earth-7b1dc4f802a54a6297e7a46888a85f77)», автор [Jacobs Development](https://sketchfab.com/Jacobs_Development), лицензия [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). Автор и лицензия указаны и на заставке игры.
+3D-модель «[Low Poly Planet Earth](https://sketchfab.com/3d-models/low-poly-planet-earth-7b1dc4f802a54a6297e7a46888a85f77)», автор [Jacobs Development](https://sketchfab.com/Jacobs_Development), лицензия [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). Автор и лицензия указаны и на заставке игры. В игре модель дополнена: дорисованы Японские острова, Мадагаскар и Исландия.
 
 Модель низкополигональная, поэтому некоторых мест в ней нет: Японии, Исландии, Мадагаскара. Такие места в викторину не включены.

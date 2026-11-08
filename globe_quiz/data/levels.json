@@ -45,6 +45,9 @@
    "questions": [
     {"text": "Найди остров Великобритания", "accept": ["great_britain"]},
     {"text": "Найди остров Ирландия", "accept": ["ireland"]},
+    {"text": "Найди остров Исландия", "accept": ["iceland"]},
+    {"text": "Найди Японские острова", "accept": ["japan_islands"]},
+    {"text": "Найди остров Мадагаскар", "accept": ["madagascar"]},
     {"text": "Найди Новую Зеландию", "accept": ["new_zealand"]},
     {"text": "Найди остров Новая Гвинея", "accept": ["new_guinea"]},
     {"text": "Найди остров Калимантан", "accept": ["kalimantan"]},

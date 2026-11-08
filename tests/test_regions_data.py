@@ -107,3 +107,46 @@ def test_most_specific_name(earth, regions):
 def test_continents_do_not_overlap(regions):
     cont = np.stack([r.faces for r in regions.regions if r.kind == "continent"])
     assert (cont.sum(axis=0) <= 1).all()
+
+
+# --- Острова, дорисованные к модели (islands.json) ---------------------------
+
+ADDED_ISLANDS = [
+    ((35.7, 139.7), "japan_islands", "eurasia"),  # Токио
+    ((43.1, 141.35), "japan_islands", "eurasia"),  # Саппоро
+    ((32.8, 130.7), "japan_islands", "eurasia"),  # Кюсю
+    ((33.6, 133.5), "japan_islands", "eurasia"),  # Сикоку
+    ((-19.0, 46.7), "madagascar", "africa"),  # центр Мадагаскара
+    ((-24.9, 46.6), "madagascar", "africa"),  # юго-восточный берег
+    ((64.15, -21.9), "iceland", "eurasia"),  # Рейкьявик
+    ((65.6, -23.8), "iceland", "eurasia"),  # Западные фьорды
+]
+
+
+@pytest.mark.parametrize("point,island,continent", ADDED_ISLANDS)
+def test_added_island_regions(earth, regions, point, island, continent):
+    face = face_at(earth, *point)
+    names = [r.id for r in regions.regions_of_face(face)]
+    assert island in names and continent in names, f"{point}: {names}"
+    assert "north_america" not in names
+
+
+@pytest.mark.parametrize("region_id", ["japan_islands", "madagascar", "iceland"])
+def test_added_island_regions_cover_only_new_land(earth, regions, region_id):
+    from globe_quiz.islands import build_islands, load_island_outlines
+
+    n_new = len(build_islands(load_island_outlines()).tris)
+    faces = np.nonzero(regions[region_id].faces)[0]
+    assert len(faces) > 0
+    # Только дорисованные грани — без кусков чужого берега.
+    assert (faces >= len(earth) - n_new).all()
+
+
+def test_every_added_face_has_its_island(earth, regions):
+    from globe_quiz.islands import build_islands, load_island_outlines
+
+    n_new = len(build_islands(load_island_outlines()).tris)
+    new = np.zeros(len(earth), bool)
+    new[len(earth) - n_new:] = True
+    covered = regions["japan_islands"].faces | regions["madagascar"].faces | regions["iceland"].faces
+    assert covered[new].all()

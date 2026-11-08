@@ -7,8 +7,9 @@ from globe_quiz.model import SURFACE_LAND, SURFACE_WATER, load_earth
 from .conftest import face_at
 
 
-def test_model_has_all_faces(earth):
-    assert len(earth) == 9187
+def test_model_has_all_faces():
+    # Исходная модель без дополнений (острова — в test_islands.py).
+    assert len(load_earth(with_islands=False)) == 9187
 
 
 def test_each_face_has_one_palette_color(earth):
@@ -38,4 +39,5 @@ def test_map_is_not_mirrored(earth):
 
 
 def test_normals_point_outward(earth):
-    assert ((earth.normals * earth.centers).sum(axis=1) >= 0).all()
+    # У береговых стенок островов нормаль перпендикулярна радиусу — допускаем ноль.
+    assert ((earth.normals * earth.centers).sum(axis=1) >= -1e-9).all()

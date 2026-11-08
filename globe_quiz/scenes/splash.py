@@ -1,4 +1,5 @@
-"""Заставка: название, вращающийся глобус, автор модели и лицензия со ссылками."""
+"""Заставка: название, вращающийся глобус, автор модели и лицензия со ссылками,
+пометка о дополнениях модели (лицензия CC-BY требует указывать изменения)."""
 
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ import webbrowser
 import pygame
 
 from ..app import Scene
+from ..islands import island_groups, load_island_outlines
 from ..ui import ACCENT, TEXT, TEXT_DIM, draw_text, font, ui_scale
 
 LINK = (130, 190, 255)
@@ -37,12 +39,15 @@ class SplashScene(Scene):
              (c["author"], c["author_url"])],
             [("Лицензия ", None), (c["license"], c["license_url"])],
         ]
+        groups = island_groups(load_island_outlines())
+        if groups:
+            self.credit_lines.append([("Модель дополнена: " + ", ".join(groups), None)])
 
     def layout(self, size) -> None:
         w, h = size
         self.s = ui_scale(pygame.display.get_surface())
         top = int(170 * self.s)
-        bottom = int(160 * self.s)
+        bottom = int(195 * self.s)
         self.app.globe.set_rect(pygame.Rect(0, top, w, max(100, h - top - bottom)))
 
     def _link_at(self, pos) -> str | None:
@@ -98,7 +103,7 @@ class SplashScene(Scene):
         draw_text(surf, "Викторина по географии", int(44 * s), TEXT, (w // 2, int(135 * s)))
 
         self.links = []
-        y = h - int(135 * s)
+        y = h - int(100 * s) - len(self.credit_lines) * int(34 * s)
         for segments in self.credit_lines:
             self._draw_credit_line(surf, segments, y)
             y += int(34 * s)

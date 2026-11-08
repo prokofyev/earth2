@@ -6,6 +6,7 @@ import pytest
 
 import globe_quiz.progress as progress_mod
 from globe_quiz.app import App, model_credits
+from globe_quiz.islands import island_groups, load_island_outlines
 from globe_quiz.scenes.level import CORRECT, LevelScene, MISS
 from globe_quiz.scenes.menu import MenuScene
 from globe_quiz.scenes.result import ResultScene
@@ -101,6 +102,7 @@ def test_all_game_texts_have_glyphs():
         texts += [q.text + (q.fact or "") for q in level.questions]
     texts += [r.name + r.fact for r in RegionSet.load().regions]
     texts += list(model_credits().values())
+    texts.append("Модель дополнена: " + ", ".join(island_groups(load_island_outlines())))
     bad = set()
     for t in texts:
         bad |= _missing_glyphs(t, f, missing)
@@ -334,3 +336,10 @@ def test_splash_hides_long_source_address(app):
     texts = [t for line in app.scene.credit_lines for t, _ in line]
     assert not any(t.startswith("http") for t in texts)
     assert "Jacobs Development" in texts and "CC-BY-4.0" in texts
+
+
+def test_splash_notes_model_additions(app):
+    frame(app)
+    lines = ["".join(t for t, _ in line) for line in app.scene.credit_lines]
+    assert lines[-1] == "Модель дополнена: Японские острова, Мадагаскар, Исландия"
+    assert len(lines) == 3  # под строками об авторе и лицензии

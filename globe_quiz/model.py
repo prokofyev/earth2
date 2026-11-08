@@ -16,6 +16,7 @@ import pygame
 
 from . import ASSETS_DIR
 from .geo import vec_to_latlon
+from .islands import build_islands, load_island_outlines
 
 WATER_COLOR = (85, 177, 241)
 ICE_COLOR = (245, 247, 250)
@@ -70,7 +71,8 @@ def fit_sphere(points: np.ndarray) -> tuple[np.ndarray, float]:
     return center, radius
 
 
-def load_earth(assets_dir: Path = ASSETS_DIR) -> EarthModel:
+def load_earth(assets_dir: Path = ASSETS_DIR, with_islands: bool = True) -> EarthModel:
+    """Модель из glTF. with_islands — дописать острова из islands.json (см. islands.py)."""
     gltf = json.loads((assets_dir / "earth.gltf").read_text())
     buf = (assets_dir / gltf["buffers"][0]["uri"]).read_bytes()
     prim = gltf["meshes"][0]["primitives"][0]
@@ -106,6 +108,14 @@ def load_earth(assets_dir: Path = ASSETS_DIR) -> EarthModel:
 
     tris, normals, centers = tris[keep], normals[keep], centers[keep]
     colors, surface = colors[keep], surface[keep]
+
+    if with_islands:
+        extra = build_islands(load_island_outlines())
+        tris = np.concatenate([tris, extra.tris])
+        normals = np.concatenate([normals, extra.normals])  # нормали островов — явные
+        centers = np.concatenate([centers, extra.tris.mean(axis=1)])
+        colors = np.concatenate([colors, extra.colors])
+        surface = np.concatenate([surface, np.full(len(extra.tris), SURFACE_LAND, np.int8)])
     return EarthModel(
         tris=tris,
         normals=normals,
