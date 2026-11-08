@@ -1,0 +1,106 @@
+{
+ "levels": [
+  {
+   "id": 1, "title": "Материки", "hint_highlight": true,
+   "questions": [
+    {"text": "Найди Евразию", "accept": ["eurasia"]},
+    {"text": "Найди Африку", "accept": ["africa"]},
+    {"text": "Найди Северную Америку", "accept": ["north_america"]},
+    {"text": "Найди Южную Америку", "accept": ["south_america"]},
+    {"text": "Найди Австралию", "accept": ["australia"]},
+    {"text": "Найди Антарктиду", "accept": ["antarctica"]}
+   ]
+  },
+  {
+   "id": 2, "title": "Океаны", "hint_highlight": true,
+   "questions": [
+    {"text": "Найди Тихий океан", "accept": ["pacific_ocean"]},
+    {"text": "Найди Атлантический океан", "accept": ["atlantic_ocean"]},
+    {"text": "Найди Индийский океан", "accept": ["indian_ocean"]},
+    {"text": "Найди Северный Ледовитый океан", "accept": ["arctic_ocean"]}
+   ]
+  },
+  {
+   "id": 3, "title": "Полюса и экватор", "hint_highlight": true,
+   "questions": [
+    {"text": "Найди Северный полюс", "accept": ["north_pole"]},
+    {"text": "Найди Южный полюс", "accept": ["south_pole"]},
+    {"text": "Найди экватор — воображаемую линию посередине Земли", "accept": ["equator"]},
+    {"text": "Ткни в любое место северного полушария", "accept": ["northern_hemisphere"],
+     "fact": "Северное полушарие — это всё, что севернее экватора."},
+    {"text": "Ткни в любое место южного полушария", "accept": ["southern_hemisphere"],
+     "fact": "Южное полушарие — это всё, что южнее экватора."},
+    {"text": "Найди материк, который целиком лежит в южном полушарии", "accept": ["australia", "antarctica"],
+     "fact": "Целиком в южном полушарии лежат два материка: Австралия и Антарктида."},
+    {"text": "Найди материк, через который проходит экватор", "accept": ["africa", "south_america"],
+     "fact": "Экватор пересекает два материка: Африку и Южную Америку."},
+    {"text": "Найди материк, который целиком лежит в северном полушарии", "accept": ["eurasia", "north_america"],
+     "fact": "Целиком в северном полушарии лежат Евразия и Северная Америка."},
+    {"text": "Найди океан, который целиком лежит в северном полушарии", "accept": ["arctic_ocean"],
+     "fact": "Северный Ледовитый океан — единственный океан, который весь лежит в северном полушарии."}
+   ]
+  },
+  {
+   "id": 4, "title": "Острова и полуострова",
+   "questions": [
+    {"text": "Найди остров Великобритания", "accept": ["great_britain"]},
+    {"text": "Найди остров Ирландия", "accept": ["ireland"]},
+    {"text": "Найди Новую Зеландию", "accept": ["new_zealand"]},
+    {"text": "Найди остров Новая Гвинея", "accept": ["new_guinea"]},
+    {"text": "Найди остров Калимантан", "accept": ["kalimantan"]},
+    {"text": "Найди остров Тасмания", "accept": ["tasmania"]},
+    {"text": "Найди остров Шри-Ланка", "accept": ["sri_lanka"]},
+    {"text": "Найди Скандинавский полуостров", "accept": ["scandinavian_peninsula"]},
+    {"text": "Найди Пиренейский полуостров", "accept": ["iberian_peninsula"]},
+    {"text": "Найди Апеннинский полуостров — он похож на сапог", "accept": ["apennine_peninsula"]},
+    {"text": "Найди Аравийский полуостров", "accept": ["arabian_peninsula"]},
+    {"text": "Найди полуостров Индостан", "accept": ["hindustan"]},
+    {"text": "Найди полуостров Камчатка", "accept": ["kamchatka"]},
+    {"text": "Найди полуостров Аляска", "accept": ["alaska"]},
+    {"text": "Найди полуостров Флорида", "accept": ["florida"]}
+   ]
+  },
+  {
+   "id": 5, "title": "Моря и заливы",
+   "questions": [
+    {"text": "Найди Средиземное море", "accept": ["mediterranean_sea"]},
+    {"text": "Найди Чёрное море", "accept": ["black_sea"]},
+    {"text": "Найди Балтийское море", "accept": ["baltic_sea"]},
+    {"text": "Найди Красное море", "accept": ["red_sea"]},
+    {"text": "Найди Карибское море", "accept": ["caribbean_sea"]},
+    {"text": "Найди Каспийское море", "accept": ["caspian_sea"]},
+    {"text": "Найди Персидский залив", "accept": ["persian_gulf"]},
+    {"text": "Найди Мексиканский залив", "accept": ["gulf_of_mexico"]},
+    {"text": "Найди Гудзонов залив", "accept": ["hudson_bay"]}
+   ]
+  },
+  {
+   "id": 6, "title": "Горы и пустыни",
+   "questions": [
+    {"text": "Найди пустыню Сахара", "accept": ["sahara"]},
+    {"text": "Найди пустыни Австралии", "accept": ["australian_deserts"]},
+    {"text": "Найди горы Анды", "accept": ["andes"]},
+    {"text": "Найди горы Гималаи", "accept": ["himalayas"]},
+    {"text": "Найди горы Кордильеры", "accept": ["cordillera"]},
+    {"text": "Найди ледяной щит Антарктиды", "accept": ["antarctic_ice_sheet"]}
+   ]
+  },
+  {
+   "id": 7, "title": "Загадки", "riddles": true,
+   "questions": [
+    {"text": "Найди самый большой материк", "accept": ["eurasia"]},
+    {"text": "Найди самый маленький материк", "accept": ["australia"]},
+    {"text": "Найди самый холодный материк", "accept": ["antarctica"]},
+    {"text": "Найди самый жаркий материк", "accept": ["africa"]},
+    {"text": "Найди самый большой и самый глубокий океан", "accept": ["pacific_ocean"]},
+    {"text": "Найди самый маленький и самый холодный океан", "accept": ["arctic_ocean"]},
+    {"text": "Найди самый тёплый океан", "accept": ["indian_ocean"]},
+    {"text": "Найди океан, который лежит между Америкой и Европой с Африкой", "accept": ["atlantic_ocean"]},
+    {"text": "Найди самое большое озеро на Земле", "accept": ["caspian_sea"]},
+    {"text": "Найди самые высокие горы на Земле", "accept": ["himalayas"]},
+    {"text": "Найди самые длинные горы на суше", "accept": ["andes"]},
+    {"text": "Найди самую большую жаркую пустыню", "accept": ["sahara"]}
+   ]
+  }
+ ]
+}
