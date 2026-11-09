@@ -6,7 +6,7 @@ import pytest
 
 import globe_quiz.progress as progress_mod
 from globe_quiz.app import App, model_credits
-from globe_quiz.scenes.level import CORRECT, LevelScene, MISS
+from globe_quiz.scenes.level import ASK, CORRECT, MISS, REVEAL, LevelScene
 from globe_quiz.scenes.menu import MenuScene
 from globe_quiz.scenes.result import ResultScene
 from globe_quiz.scenes.splash import SplashScene
@@ -421,3 +421,67 @@ def test_locked_cards_show_lock_below_title(app, size):
             assert (abs(area - LOCK_LINE).max(axis=1) < 12).any()  # светлый контур
     finally:
         pygame.display.set_mode((800, 600))
+
+
+def _islands_scene(app, first_rid="sicily"):
+    level = next(lv for lv in app.levels if lv.key == "islands")
+    app.switch(LevelScene(app, level))
+    scene = app.scene
+    q = next(q for q in level.questions if q.accept == (first_rid,))
+    scene.run.questions[0] = q
+    frame(app)
+    return scene
+
+
+def _miss_three_times(app, scene):
+    g = app.globe
+    for _ in range(3):
+        click(app, g.rect.center)  # в центр вида — Африка, мимо острова
+    assert scene.state == REVEAL
+    for _ in range(300):  # ждём конца полёта к ответу
+        frame(app, dt=0.05)
+        if not g.busy:
+            break
+    assert not g.busy
+
+
+def _settle(app, frames=200):
+    for _ in range(frames):
+        frame(app, dt=0.05)
+
+
+@pytest.mark.parametrize("own_zoom", [1.0, 2.0])
+def test_zoom_returns_after_reveal(app, own_zoom):
+    scene = _islands_scene(app)
+    g = app.globe
+    g.view.zoom = g.target_zoom = own_zoom
+    frame(app)
+    _miss_three_times(app, scene)
+    assert g.view.zoom > 3.0  # Сицилию приблизили
+    shown = (g.view.center_lat, g.view.center_lon)
+    frame(app, [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+    assert scene.state == ASK and scene.run.index == 1
+    _settle(app)
+    assert g.view.zoom == pytest.approx(own_zoom, abs=1e-3)  # масштаб ребёнка вернулся
+    assert (g.view.center_lat, g.view.center_lon) == pytest.approx(shown)  # глобус остался у Сицилии
+
+
+def test_correct_answer_keeps_zoom(app):
+    scene = _islands_scene(app, "greenland")
+    g = app.globe
+    g.view.center_lat, g.view.center_lon = 70.0, -40.0  # Гренландия перед глазами
+    frame(app)
+    zoom = g.view.zoom
+    click(app, g.rect.center)
+    assert scene.state == CORRECT
+    frame(app, [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+    _settle(app, 40)
+    assert g.view.zoom == pytest.approx(zoom)
+
+
+def test_last_question_after_reveal_goes_to_result(app):
+    scene = _islands_scene(app)
+    scene.run.questions = scene.run.questions[:1]  # единственный вопрос — он же последний
+    _miss_three_times(app, scene)
+    frame(app, [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
+    assert isinstance(app.scene, ResultScene)

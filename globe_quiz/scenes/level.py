@@ -51,6 +51,7 @@ class LevelScene(Scene):
         self.btn_plus = Button("+")
         self.btn_minus = Button("−")
         self.btn_next = Button("Дальше ›", visible=False)
+        self.zoom_before_reveal: float | None = None  # масштаб ребёнка до показа ответа
         g = self.app.globe
         g.view.center_lat, g.view.center_lon = 20.0, 20.0
         g.view.zoom = g.target_zoom = 1.0
@@ -141,6 +142,8 @@ class LevelScene(Scene):
             target, _ = nearest_target(app.regions, q, tap.latlon)
             self.title, self.body = reveal_message(target, q)
             app.globe.clear_effects()
+            # Показ ответа приближает объект; после «Дальше» вернём масштаб ребёнка.
+            self.zoom_before_reveal = app.globe.target_zoom
             self._show(target, "reveal", REVEAL_COLOR, fly=True)
             self.btn_next.visible = True
             return
@@ -184,6 +187,10 @@ class LevelScene(Scene):
         self.title = self.body = ""
         self.btn_next.visible = False
         self.app.globe.clear_effects()
+        if self.zoom_before_reveal is not None:
+            # Плавно к прежнему масштабу; глобус остаётся повёрнутым к показанному объекту.
+            self.app.globe.target_zoom = self.zoom_before_reveal
+            self.zoom_before_reveal = None
 
     # --- Время и рисование -----------------------------------------------
 

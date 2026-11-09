@@ -8,7 +8,7 @@ from globe_quiz.regions import RegionSet
 
 TITLES = {
     "continents": "Материки", "oceans": "Океаны", "poles_equator": "Полюса и экватор",
-    "islands": "Острова", "peninsulas": "Полуострова", "seas": "Моря", "gulfs": "Заливы и Каспий",
+    "islands": "Острова", "peninsulas": "Полуострова", "seas": "Моря", "gulfs": "Заливы и озёра",
     "mountains": "Горы и нагорья", "plains_deserts": "Равнины и пустыни",
     "peaks": "Вершины и вулканы", "riddles": "Загадки",
 }
