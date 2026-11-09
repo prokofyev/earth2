@@ -57,7 +57,16 @@ CONTROL_POINTS = [
     # горы, пустыни, лёд
     ((22, 10), "sahara"),
     ((-25, 125), "australian_deserts"),
-    ((33, 90), "himalayas"),
+    ((28.5, 85), "himalayas"),
+    ((33, 90), "tibetan_plateau"),
+    ((72, -40), "greenland"),
+    ((72, -40), "north_america"),
+    ((47, 10), "alps"),
+    ((42.5, 44), "caucasus"),
+    ((9, 39), "ethiopian_highlands"),
+    ((55, 40), "east_european_plain"),
+    ((-5, -62), "amazon_lowland"),
+    ((87, 0), "arctic_ocean"),  # полярная ледяная шапка — лёд Северного Ледовитого океана
     ((50, -120), "cordillera"),
     ((-80, 0), "antarctic_ice_sheet"),
     # полушария
@@ -89,7 +98,7 @@ def test_no_unlabeled_faces(regions):
 
 def test_every_face_region_has_faces(regions):
     for r in regions.regions:
-        if r.kind not in ("point", "line"):
+        if r.kind not in ("point", "peak", "line"):
             assert r.faces.any(), r.id
 
 
@@ -109,44 +118,61 @@ def test_continents_do_not_overlap(regions):
     assert (cont.sum(axis=0) <= 1).all()
 
 
-# --- Острова, дорисованные к модели (islands.json) ---------------------------
+# --- Рельеф: горы и равнины по высоте, вершины ------------------------------------
 
-ADDED_ISLANDS = [
-    ((35.7, 139.7), "japan_islands", "eurasia"),  # Токио
-    ((43.1, 141.35), "japan_islands", "eurasia"),  # Саппоро
-    ((32.8, 130.7), "japan_islands", "eurasia"),  # Кюсю
-    ((33.6, 133.5), "japan_islands", "eurasia"),  # Сикоку
-    ((-19.0, 46.7), "madagascar", "africa"),  # центр Мадагаскара
-    ((-24.9, 46.6), "madagascar", "africa"),  # юго-восточный берег
-    ((64.15, -21.9), "iceland", "eurasia"),  # Рейкьявик
-    ((65.6, -23.8), "iceland", "eurasia"),  # Западные фьорды
-]
+MOUNTAINS = ["alps", "caucasus", "ural_mountains", "scandinavian_mountains", "atlas", "himalayas",
+             "tibetan_plateau", "ethiopian_highlands", "andes", "cordillera", "great_dividing_range"]
+PLAINS = ["east_european_plain", "west_siberian_plain", "amazon_lowland"]
 
 
-@pytest.mark.parametrize("point,island,continent", ADDED_ISLANDS)
-def test_added_island_regions(earth, regions, point, island, continent):
-    face = face_at(earth, *point)
-    names = [r.id for r in regions.regions_of_face(face)]
-    assert island in names and continent in names, f"{point}: {names}"
-    assert "north_america" not in names
+@pytest.mark.parametrize("rid", MOUNTAINS)
+def test_mountains_are_raised(earth, regions, rid):
+    faces = regions[rid].faces
+    assert faces.sum() >= 5
+    # Горы — только возвышенные грани, заметно выше суши вокруг.
+    lat, lon = regions[rid].center
+    from globe_quiz.geo import angular_distance
+    d = np.array([angular_distance((lat, lon), tuple(x)) for x in earth.latlon])
+    any_mountains = np.zeros(len(earth), bool)
+    for m in MOUNTAINS:
+        any_mountains |= regions[m].faces
+    around = (d < 15) & (earth.surface == 1) & ~any_mountains
+    assert earth.height[faces].min() >= regions[rid].parts[0].min_height
+    assert np.median(earth.height[faces]) > np.median(earth.height[around])
 
 
-@pytest.mark.parametrize("region_id", ["japan_islands", "madagascar", "iceland"])
-def test_added_island_regions_cover_only_new_land(earth, regions, region_id):
-    from globe_quiz.islands import build_islands, load_island_outlines
-
-    n_new = len(build_islands(load_island_outlines()).tris)
-    faces = np.nonzero(regions[region_id].faces)[0]
-    assert len(faces) > 0
-    # Только дорисованные грани — без кусков чужого берега.
-    assert (faces >= len(earth) - n_new).all()
+@pytest.mark.parametrize("rid", PLAINS)
+def test_plains_are_low(earth, regions, rid):
+    faces = regions[rid].faces
+    assert faces.sum() >= 10
+    assert earth.height[faces].max() <= regions[rid].parts[0].max_height
 
 
-def test_every_added_face_has_its_island(earth, regions):
-    from globe_quiz.islands import build_islands, load_island_outlines
+PEAKS = {  # вершина: (настоящие координаты, материк)
+    "everest": ((27.99, 86.93), "eurasia"),
+    "kilimanjaro": ((-3.07, 37.35), "africa"),
+    "elbrus": ((43.35, 42.44), "eurasia"),
+    "mont_blanc": ((45.83, 6.86), "eurasia"),
+    "aconcagua": ((-32.65, -70.01), "south_america"),
+    "denali": ((63.07, -151.0), "north_america"),
+}
 
-    n_new = len(build_islands(load_island_outlines()).tris)
-    new = np.zeros(len(earth), bool)
-    new[len(earth) - n_new:] = True
-    covered = regions["japan_islands"].faces | regions["madagascar"].faces | regions["iceland"].faces
-    assert covered[new].all()
+
+@pytest.mark.parametrize("rid", PEAKS)
+def test_peaks_on_raised_land_near_real_place(earth, regions, rid):
+    from globe_quiz.geo import angular_distance
+
+    real, continent = PEAKS[rid]
+    peak = regions[rid]
+    assert peak.kind == "peak"
+    assert angular_distance(peak.at, real) <= 6.0
+    f = face_at(earth, *peak.at)
+    assert earth.surface[f] != SURFACE_WATER
+    assert continent in [r.id for r in regions.regions_of_face(f)]
+    # Отдельных конусов в модели нет: вершина стоит в горах или выше равнин вокруг.
+    any_mountains = np.zeros(len(earth), bool)
+    for m in MOUNTAINS:
+        any_mountains |= regions[m].faces
+    d = np.array([angular_distance(peak.at, tuple(x)) for x in earth.latlon])
+    around = (d > 3) & (d < 7) & (earth.surface == 1) & ~any_mountains
+    assert any_mountains[f] or earth.height[f] > np.median(earth.height[around])

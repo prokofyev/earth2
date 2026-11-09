@@ -46,6 +46,7 @@
     {"text": "Найди остров Великобритания", "accept": ["great_britain"]},
     {"text": "Найди остров Ирландия", "accept": ["ireland"]},
     {"text": "Найди остров Исландия", "accept": ["iceland"]},
+    {"text": "Найди остров Гренландия — самый большой остров Земли", "accept": ["greenland"]},
     {"text": "Найди Японские острова", "accept": ["japan_islands"]},
     {"text": "Найди остров Мадагаскар", "accept": ["madagascar"]},
     {"text": "Найди Новую Зеландию", "accept": ["new_zealand"]},
@@ -64,7 +65,7 @@
    ]
   },
   {
-   "id": 5, "title": "Моря и заливы",
+   "id": 5, "title": "Моря, заливы и озёра",
    "questions": [
     {"text": "Найди Средиземное море", "accept": ["mediterranean_sea"]},
     {"text": "Найди Чёрное море", "accept": ["black_sea"]},
@@ -78,18 +79,40 @@
    ]
   },
   {
-   "id": 6, "title": "Горы и пустыни",
+   "id": 6, "title": "Горы, равнины и пустыни",
    "questions": [
+    {"text": "Найди Альпы", "accept": ["alps"]},
+    {"text": "Найди горы Кавказ", "accept": ["caucasus"]},
+    {"text": "Найди Уральские горы", "accept": ["ural_mountains"]},
+    {"text": "Найди Скандинавские горы", "accept": ["scandinavian_mountains"]},
+    {"text": "Найди горы Атлас на севере Африки", "accept": ["atlas"]},
+    {"text": "Найди горы Гималаи", "accept": ["himalayas"]},
+    {"text": "Найди Тибетское нагорье", "accept": ["tibetan_plateau"]},
+    {"text": "Найди Эфиопское нагорье", "accept": ["ethiopian_highlands"]},
+    {"text": "Найди горы Анды", "accept": ["andes"]},
+    {"text": "Найди горы Кордильеры", "accept": ["cordillera"]},
+    {"text": "Найди Большой Водораздельный хребет в Австралии", "accept": ["great_dividing_range"]},
+    {"text": "Найди Восточно-Европейскую равнину", "accept": ["east_european_plain"]},
+    {"text": "Найди Западно-Сибирскую равнину", "accept": ["west_siberian_plain"]},
+    {"text": "Найди Амазонскую низменность", "accept": ["amazon_lowland"]},
     {"text": "Найди пустыню Сахара", "accept": ["sahara"]},
     {"text": "Найди пустыни Австралии", "accept": ["australian_deserts"]},
-    {"text": "Найди горы Анды", "accept": ["andes"]},
-    {"text": "Найди горы Гималаи", "accept": ["himalayas"]},
-    {"text": "Найди горы Кордильеры", "accept": ["cordillera"]},
     {"text": "Найди ледяной щит Антарктиды", "accept": ["antarctic_ice_sheet"]}
    ]
   },
   {
-   "id": 7, "title": "Загадки", "riddles": true,
+   "id": 7, "title": "Вершины и вулканы",
+   "questions": [
+    {"text": "Найди гору Эверест (Джомолунгму)", "accept": ["everest"]},
+    {"text": "Найди Килиманджаро — самую высокую гору Африки", "accept": ["kilimanjaro"]},
+    {"text": "Найди гору Эльбрус", "accept": ["elbrus"]},
+    {"text": "Найди гору Монблан в Альпах", "accept": ["mont_blanc"]},
+    {"text": "Найди гору Аконкагуа в Андах", "accept": ["aconcagua"]},
+    {"text": "Найди гору Денали на Аляске", "accept": ["denali"]}
+   ]
+  },
+  {
+   "id": 8, "title": "Загадки", "riddles": true,
    "questions": [
     {"text": "Найди самый большой материк", "accept": ["eurasia"]},
     {"text": "Найди самый маленький материк", "accept": ["australia"]},
@@ -102,7 +125,12 @@
     {"text": "Найди самое большое озеро на Земле", "accept": ["caspian_sea"]},
     {"text": "Найди самые высокие горы на Земле", "accept": ["himalayas"]},
     {"text": "Найди самые длинные горы на суше", "accept": ["andes"]},
-    {"text": "Найди самую большую жаркую пустыню", "accept": ["sahara"]}
+    {"text": "Найди самую большую жаркую пустыню", "accept": ["sahara"]},
+    {"text": "Найди самую высокую гору на Земле", "accept": ["everest"]},
+    {"text": "Найди самую высокую гору Африки — это спящий вулкан", "accept": ["kilimanjaro"]},
+    {"text": "Найди горы, по которым проходит граница Европы и Азии", "accept": ["ural_mountains"]},
+    {"text": "Найди самое высокое нагорье — «крышу мира»", "accept": ["tibetan_plateau"]},
+    {"text": "Найди самый большой остров на Земле", "accept": ["greenland"]}
    ]
   }
  ]

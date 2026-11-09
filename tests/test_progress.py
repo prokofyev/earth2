@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from globe_quiz.progress import LEGACY_PLAYER, Players, Progress, load_players, save_players
+from globe_quiz import PROJECT_DIR
+from globe_quiz.progress import VERSION, Players, Progress, load_players, save_players
 
 
 def test_first_run_has_no_players(tmp_path):
@@ -91,18 +92,41 @@ def test_save_and_load_roundtrip(tmp_path):
     assert not list(tmp_path.glob(".progress-*"))  # временные файлы убраны
 
 
-def test_old_format_moves_to_default_player(tmp_path):
+V1 = {"version": 1, "best": {"1": 20, "2": 9}, "unlocked": 3}
+V2 = {"version": 2, "current": "Саша",
+      "players": {"Саша": {"best": {"1": 17, "7": 20}, "unlocked": 7}, "Илья": {"best": {"1": 12}, "unlocked": 2}}}
+
+
+@pytest.mark.parametrize("old", [V1, V2], ids=["v1", "v2"])
+def test_old_versions_start_clean(tmp_path, old):
+    # Прогресс игры с семью уровнями и старой моделью не переносится: чистый лист.
     path = tmp_path / "progress.json"
-    path.write_text(json.dumps({"version": 1, "best": {"1": 20, "2": 9}, "unlocked": 3}), encoding="utf-8")
+    path.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
     loaded = load_players(path)
-    assert loaded.current == LEGACY_PLAYER
-    assert loaded.progress.unlocked == 3 and loaded.progress.best == {1: 20, 2: 9}
+    assert loaded.names == [] and loaded.current is None
+    assert path.exists()  # старый файл не трогаем до первого сохранения
+    loaded.add("Маша")
+    save_players(loaded, path)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["version"] == VERSION == 3 and list(data["players"]) == ["Маша"]
+
+
+def test_real_old_progress_file_starts_clean(tmp_path):
+    real = PROJECT_DIR / "progress.json"
+    if not real.exists():
+        pytest.skip("нет файла прогресса рядом с игрой")
+    data = json.loads(real.read_text(encoding="utf-8"))
+    if data.get("version") == VERSION:
+        pytest.skip("файл уже новой версии")
+    copy = tmp_path / "progress.json"
+    copy.write_text(real.read_text(encoding="utf-8"), encoding="utf-8")
+    assert load_players(copy).names == []
 
 
 def test_corrupted_file_starts_without_players(tmp_path):
     path = tmp_path / "progress.json"
     for content in ["{не json", json.dumps([1, 2]), json.dumps({"version": 99}),
-                    json.dumps({"version": 2, "players": {"Маша": {"best": {"1": "много"}}}})]:
+                    json.dumps({"version": 3, "players": {"Маша": {"best": {"1": "много"}}}})]:
         path.write_text(content, encoding="utf-8")
         p = load_players(path)
         assert p.names == [] and p.current is None

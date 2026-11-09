@@ -32,7 +32,7 @@ def _render(earth, lat, lon, zoom=1.0):
 
 def _screen_point_for(r, region):
     """Экранная точка, куда надо ткнуть, чтобы попасть в регион."""
-    if region.kind == "point":
+    if region.kind in ("point", "peak"):
         xy, vis = r.project_latlon(*region.at)
         return tuple(xy)
     if region.kind == "line":
@@ -131,7 +131,7 @@ def test_correct_and_reveal_messages(regions):
     assert title == "Вот Тихий океан."
 
 
-@pytest.mark.parametrize("lat,lon", [(80, 30), (78.5, -100)])
+@pytest.mark.parametrize("lat,lon", [(80, 30), (80, -100)])  # в 10° от полюса, как в сценарии
 def test_roughly_at_north_pole_counts(earth, regions, lat, lon):
     r = _render(earth, 70, lon)
     q = Question("Найди Северный полюс", ("north_pole",))
@@ -154,3 +154,26 @@ def test_roughly_at_equator(earth, regions, lat, ok):
     pos = tuple(r.project_latlon(lat, 20)[0])
     found = check_answer(r, regions, q, inspect_tap(r, regions, pos), pos)
     assert (found is not None) == ok
+
+
+@pytest.mark.parametrize("dist,ok", [(3.0, True), (8.0, False)])
+def test_peak_tolerance(earth, regions, dist, ok):
+    # Вершина на модели не отдельный конус: засчитываем тык не дальше 5° от неё.
+    kili = regions["kilimanjaro"]
+    lat, lon = kili.at
+    r = _render(earth, lat, lon, 2.5)
+    q = Question("Найди Килиманджаро", ("kilimanjaro",))
+    pos = tuple(r.project_latlon(lat - dist, lon)[0])
+    tap = inspect_tap(r, regions, pos)
+    assert tap is not None
+    assert (check_answer(r, regions, q, tap, pos) is not None) == ok
+
+
+def test_miss_on_elbrus_names_alps_and_points_east(earth, regions):
+    r = _render(earth, 46.6, 9.9, 2.0)
+    q = Question("Найди Эльбрус", ("elbrus",))
+    pos = tuple(r.project_latlon(*regions["alps"].center)[0])
+    tap = inspect_tap(r, regions, pos)
+    assert check_answer(r, regions, q, tap, pos) is None
+    text = miss_message(regions, q, tap, riddle=False)
+    assert text.startswith("Это Альпы.") and "восточнее" in text

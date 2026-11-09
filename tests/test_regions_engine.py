@@ -6,7 +6,7 @@ from globe_quiz.geo import latlon_to_vec
 from globe_quiz.regions import RegionSet, parse_region, point_in_polygon
 
 
-def _fake_model(points):
+def _fake_model(points, heights=None):
     """Модель из маленьких граней в заданных точках: [(lat, lon, surface), ...]."""
     lat = np.array([p[0] for p in points], float)
     lon = np.array([p[1] for p in points], float)
@@ -19,6 +19,7 @@ def _fake_model(points):
         colors=np.zeros((len(points), 3), np.uint8),
         surface=np.array([p[2] for p in points], np.int8),
         latlon=np.stack([lat, lon], 1),
+        height=np.zeros(len(points)) if heights is None else np.asarray(heights, float),
     )
 
 
@@ -82,3 +83,28 @@ def test_nearest_target_point():
 def test_duplicate_ids_rejected():
     with pytest.raises(ValueError):
         RegionSet([parse_region({"id": "x", "name": "X", "kind": "island"})] * 2)
+
+
+def test_height_limits_pick_mountains_and_plains():
+    model = _fake_model([(45, 10, SURFACE_LAND)] * 3 + [(45, 30, SURFACE_LAND)], heights=[2.2, 4.0, 6.0, 7.0])
+    box = [[40, 0], [40, 20], [50, 20], [50, 0]]
+    regions = RegionSet([
+        parse_region({"id": "alps", "name": "Альпы", "kind": "mountains", "surface": "land",
+                      "polygon": box, "min_height": 3.5}),
+        parse_region({"id": "plain", "name": "равнина", "kind": "plain", "surface": "land",
+                      "polygon": box, "max_height": 3.0}),
+    ]).assign(model)
+    assert regions["alps"].faces.tolist() == [False, True, True, False]  # только высокие и в контуре
+    assert regions["plain"].faces.tolist() == [True, False, False, False]
+    assert regions.most_specific(0).id == "plain"
+
+
+def test_peak_is_a_target_only_point():
+    model = _fake_model([(-3, 37, SURFACE_LAND)])
+    regions = RegionSet([
+        parse_region({"id": "kili", "name": "Килиманджаро", "kind": "peak", "at": [-5.5, 34.0]}),
+    ]).assign(model)
+    kili = regions["kili"]
+    assert kili.at == (-5.5, 34.0) and kili.faces is None
+    assert regions.nearest_target_point(kili, (10, 10)) == (-5.5, 34.0)
+    assert regions.most_specific(0) is None  # вершина не называется при промахе

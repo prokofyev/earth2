@@ -2,12 +2,12 @@ from globe_quiz.quiz import load_levels
 from globe_quiz.regions import RegionSet
 
 
-def test_seven_levels_in_order():
+def test_eight_levels_in_order():
     levels = load_levels()
-    assert [lv.id for lv in levels] == [1, 2, 3, 4, 5, 6, 7]
+    assert [lv.id for lv in levels] == [1, 2, 3, 4, 5, 6, 7, 8]
     assert [lv.title for lv in levels] == [
         "Материки", "Океаны", "Полюса и экватор", "Острова и полуострова",
-        "Моря и заливы", "Горы и пустыни", "Загадки",
+        "Моря, заливы и озёра", "Горы, равнины и пустыни", "Вершины и вулканы", "Загадки",
     ]
 
 
@@ -29,8 +29,14 @@ def test_four_oceans_only():
 
 
 def test_hint_highlight_only_on_first_three_levels():
-    assert [lv.hint_highlight for lv in load_levels()] == [True] * 3 + [False] * 4
+    assert [lv.hint_highlight for lv in load_levels()] == [True] * 3 + [False] * 5
 
 
 def test_only_last_level_is_riddles():
-    assert [lv.riddles for lv in load_levels()] == [False] * 6 + [True]
+    assert [lv.riddles for lv in load_levels()] == [False] * 7 + [True]
+
+
+def test_peaks_level_has_only_peaks():
+    regions = RegionSet.load()
+    peaks = load_levels()[6]
+    assert {regions[rid].kind for q in peaks.questions for rid in q.accept} == {"peak"}

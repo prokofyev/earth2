@@ -6,7 +6,6 @@ import pytest
 
 import globe_quiz.progress as progress_mod
 from globe_quiz.app import App, model_credits
-from globe_quiz.islands import island_groups, load_island_outlines
 from globe_quiz.scenes.level import CORRECT, LevelScene, MISS
 from globe_quiz.scenes.menu import MenuScene
 from globe_quiz.scenes.result import ResultScene
@@ -65,7 +64,7 @@ def target_screen_pos(app, region_id):
     for _ in range(150):
         g.update(0.05)
     frame(app)
-    if region.kind == "point":
+    if region.kind in ("point", "peak"):
         (x, y), _ = g.renderer.project_latlon(*region.at)
         return int(x + g.rect.left), int(y + g.rect.top)
     if region.kind == "line":
@@ -102,7 +101,6 @@ def test_all_game_texts_have_glyphs():
         texts += [q.text + (q.fact or "") for q in level.questions]
     texts += [r.name + r.fact for r in RegionSet.load().regions]
     texts += list(model_credits().values())
-    texts.append("Модель дополнена: " + ", ".join(island_groups(load_island_outlines())))
     bad = set()
     for t in texts:
         bad |= _missing_glyphs(t, f, missing)
@@ -111,10 +109,13 @@ def test_all_game_texts_have_glyphs():
 
 def test_credits_from_model():
     c = model_credits()
-    assert c["title"] == "Low Poly Planet Earth"
-    assert c["author"] == "Jacobs Development"
-    assert c["license"] == "CC-BY-4.0"
-    assert c["source"].startswith("https://sketchfab.com/")
+    assert c["title"] == "The Whole World"
+    assert c["author"] == "Davision3d"
+    assert c["author_url"] == "https://www.thingiverse.com/Davision3d/designs"
+    assert c["license"] == "CC BY-NC 4.0"
+    assert c["license_url"] == "https://creativecommons.org/licenses/by-nc/4.0/"
+    assert c["source"] == "https://www.thingiverse.com/thing:671647"
+    assert c["changes"] == "Модель упрощена и раскрашена для игры"
 
 
 def test_full_flow_level_one(app, tmp_path):
@@ -177,7 +178,7 @@ def test_resize_relayouts(app):
     assert app.scene.btn_minus.rect.bottom <= 480
 
 
-def test_all_seven_levels_in_a_row_from_fresh_start(app):
+def test_all_eight_levels_in_a_row_from_fresh_start(app):
     """С чистого прогресса проходим все уровни подряд; каждый открывает следующий."""
     for level in app.levels:
         app.switch(MenuScene(app))
@@ -198,7 +199,7 @@ def test_all_seven_levels_in_a_row_from_fresh_start(app):
                 break
         assert isinstance(app.scene, ResultScene) and app.scene.passed
     saved = current_progress()
-    assert saved.unlocked == 7
+    assert saved.unlocked == 8
     assert all(saved.best_for(lv.id) == 3 * min(8, len(lv.questions)) for lv in app.levels)
 
 
@@ -238,8 +239,15 @@ def test_result_failed_offers_retry(app):
 
 
 def test_result_last_level_offers_retry(app):
-    result = _finish_level(app, app.levels[6])
+    result = _finish_level(app, app.levels[7])
     assert result.passed and result.btn_main.text == "Ещё раз"
+
+
+def test_after_peaks_next_is_riddles(app):
+    result = _finish_level(app, app.levels[6])
+    assert result.passed and result.btn_main.text == "Следующий уровень"
+    click(app, result.btn_main.rect.center)
+    assert isinstance(app.scene, LevelScene) and app.scene.level.title == "Загадки"
 
 
 def type_text(app, text):
@@ -248,6 +256,28 @@ def type_text(app, text):
 
 def press(app, key):
     frame(app, [pygame.event.Event(pygame.KEYDOWN, key=key)])
+
+
+def test_old_progress_file_starts_clean(tmp_path, monkeypatch):
+    """Прогресс прежней версии (семь уровней) не переносится: игра спрашивает имя."""
+    import json
+
+    from globe_quiz.scenes.players import PlayersScene
+
+    path = tmp_path / "progress.json"
+    path.write_text(json.dumps({"version": 2, "current": "Саша", "players": {
+        "Саша": {"best": {str(i): 20 for i in range(1, 8)}, "unlocked": 7}}}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(progress_mod, "PROGRESS_PATH", path)
+    app = App()
+    app._size = None
+    frame(app)
+    click(app, (10, 10))
+    assert isinstance(app.scene, PlayersScene) and app.scene.title == "Как тебя зовут?"
+    type_text(app, "Саша")
+    press(app, pygame.K_RETURN)
+    assert isinstance(app.scene, MenuScene)
+    assert app.progress.unlocked == 1 and app.progress.best == {}
+    pygame.key.stop_text_input()
 
 
 def test_first_run_asks_for_name(fresh_app):
@@ -272,8 +302,8 @@ def test_first_run_asks_for_name(fresh_app):
 def test_switch_player_and_separate_progress(app):
     from globe_quiz.scenes.players import PlayersScene
 
-    app.progress.record(1, 18, True, 7)
-    app.progress.record(2, 12, True, 7)
+    app.progress.record(1, 18, True, 8)
+    app.progress.record(2, 12, True, 8)
     app.save_progress()
     app.switch(MenuScene(app))
     frame(app)
@@ -335,11 +365,23 @@ def test_splash_hides_long_source_address(app):
     frame(app)
     texts = [t for line in app.scene.credit_lines for t, _ in line]
     assert not any(t.startswith("http") for t in texts)
-    assert "Jacobs Development" in texts and "CC-BY-4.0" in texts
+    assert "Davision3d" in texts and "CC BY-NC 4.0" in texts and "The Whole World" in texts
 
 
-def test_splash_notes_model_additions(app):
+def test_splash_notes_model_changes(app):
     frame(app)
     lines = ["".join(t for t, _ in line) for line in app.scene.credit_lines]
-    assert lines[-1] == "Модель дополнена: Японские острова, Мадагаскар, Исландия"
+    assert lines[-1] == "Модель упрощена и раскрашена для игры"
     assert len(lines) == 3  # под строками об авторе и лицензии
+
+
+@pytest.mark.parametrize("size", [(1024, 768), (1792, 982), (800, 600)])
+def test_menu_fits_eight_cards(app, size):
+    app.switch(MenuScene(app))
+    app.scene.layout(size)
+    win = pygame.Rect((0, 0), size)
+    rects = [rect for rect, _ in app.scene.cards]
+    assert len(rects) == 8
+    assert all(win.contains(r) for r in rects)  # ни одна не обрезана
+    assert not any(a.colliderect(b) for i, a in enumerate(rects) for b in rects[i + 1:])
+    assert [lv.title for _, lv in app.scene.cards][-2:] == ["Вершины и вулканы", "Загадки"]

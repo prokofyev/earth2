@@ -78,6 +78,7 @@ class GlobeWidget:
         self.render_count = 0
         self._cache: pygame.Surface | None = None
         self._cache_key = None
+        self._last_key = None
         self._press: tuple[int, int] | None = None
         self._last: tuple[int, int] | None = None
         self._max_shift = 0.0
@@ -195,15 +196,25 @@ class GlobeWidget:
 
     def draw(self, surf: pygame.Surface) -> None:
         key = (self.view.key(), self.rect.size, tuple(sorted(self._glows)))
-        if self._cache is None or key != self._cache_key or self._glows:
-            if self._cache is None:
-                self._cache = pygame.Surface(self.rect.size).convert()
-                self._cache.set_colorkey(_COLORKEY)
-            self._cache.fill(_COLORKEY)
-            self.renderer.draw(self._cache, self._cache.get_rect(), self._highlights(), outside=_COLORKEY)
-            self._cache_key = key
+        moving = key != self._last_key or bool(self._glows)
+        self._last_key = key
+        if moving and surf.get_rect().contains(self.rect):
+            # Глобус вращается или мерцает: рисуем сразу на экран (в области глобуса),
+            # без промежуточного кадра — так быстрее, а кадр всё равно новый.
+            self.renderer.draw(surf.subsurface(self.rect), pygame.Rect((0, 0), self.rect.size), self._highlights())
+            self._cache_key = None
             self.render_count += 1
-        surf.blit(self._cache, self.rect.topleft)
+        else:
+            # Глобус стоит: один раз рисуем в запасной кадр и дальше только копируем.
+            if self._cache is None or self._cache.get_size() != self.rect.size or key != self._cache_key:
+                if self._cache is None or self._cache.get_size() != self.rect.size:
+                    self._cache = pygame.Surface(self.rect.size).convert()
+                    self._cache.set_colorkey(_COLORKEY)
+                self._cache.fill(_COLORKEY)
+                self.renderer.draw(self._cache, self._cache.get_rect(), self._highlights(), outside=_COLORKEY)
+                self._cache_key = key
+                self.render_count += 1
+            surf.blit(self._cache, self.rect.topleft)
         self._draw_atmosphere(surf)
         self._draw_markers(surf)
 
@@ -211,7 +222,7 @@ class GlobeWidget:
         fr = self.renderer.frame
         if fr is None:
             return
-        radius = fr.scale
+        radius = fr.scale * self.renderer.model.sea_radius  # атмосфера — вокруг океана, горы торчат сквозь неё
         w, h = self.rect.size
         cx, cy = fr.center
         # Кольцо целиком за пределами экрана (сильный зум) — рисовать нечего.

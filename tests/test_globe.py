@@ -103,3 +103,31 @@ def test_fly_to_centers_target(widget):
     assert not widget.busy
     assert widget.view.center_lat == pytest.approx(-19, abs=0.1)
     assert widget.view.center_lon == pytest.approx(46.5, abs=0.1)
+
+
+def test_pick_mountain_beyond_ocean_edge(earth):
+    # Тибет за правым краем: в 88° от центра вида он выглядывает за круг океана.
+    r = GlobeRenderer(earth, View(33, 0, 1.0))
+    surf = pygame.Surface((600, 600))
+    surf.fill((1, 2, 3))
+    r.draw(surf, surf.get_rect())
+    cx, cy = r.frame.center
+    sea_px = r.frame.scale * earth.sea_radius
+    px = pygame.surfarray.array3d(surf)
+    xx, yy = np.mgrid[0:600, 0:600]
+    beyond = ((px != (1, 2, 3)).any(axis=2) & (np.hypot(xx - cx, yy - cy) > sea_px + 4) & (xx > cx))
+    assert beyond.any(), "за краем океана справа нет гор"
+    d = np.where(beyond, np.hypot(xx - cx, yy - cy), 0).ravel()
+    found, face = None, None
+    for k in np.argsort(-d)[:200]:  # самые выступающие точки, у края — внутри грани
+        x, y = np.unravel_index(k, (600, 600))
+        face = r.pick_face((int(x), int(y)))
+        if face is not None:
+            found = (int(x), int(y))
+            break
+    assert face is not None
+    assert np.hypot(found[0] - cx, found[1] - cy) > sea_px + 4
+    lat, lon = earth.latlon[face]
+    assert 20 < lat < 45 and 70 < lon < 110 and not earth.is_water[face]
+    tap_lat, tap_lon = r.screen_to_latlon(found)
+    assert abs(tap_lat - lat) < 5 and abs(tap_lon - lon) < 5

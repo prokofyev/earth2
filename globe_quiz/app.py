@@ -7,7 +7,7 @@ import sys
 
 import pygame
 
-from . import ASSETS_DIR
+from . import DATA_DIR
 from .globe_widget import GlobeWidget
 from .model import load_earth
 from .progress import Players, Progress, load_players, save_players
@@ -34,20 +34,10 @@ def open_window() -> pygame.Surface:
 
 
 def model_credits() -> dict:
-    """Сведения об авторе модели из самого файла glTF."""
-    extras = json.loads((ASSETS_DIR / "earth.gltf").read_text())["asset"].get("extras", {})
-    author = extras.get("author", "")
-    name = author.split(" (")[0]
-    author_url = author.split(" (")[1].rstrip(")") if " (" in author else ""
-    lic = extras.get("license", "")
-    return {
-        "title": extras.get("title", ""),
-        "author": name,
-        "author_url": author_url,
-        "source": extras.get("source", ""),
-        "license": lic.split(" (")[0],
-        "license_url": lic.split(" (")[1].rstrip(")") if " (" in lic else "",
-    }
+    """Сведения об авторе модели Земли (globe_quiz/data/model.json)."""
+    data = json.loads((DATA_DIR / "model.json").read_text(encoding="utf-8"))
+    keys = ("title", "author", "author_url", "source", "license", "license_url", "changes")
+    return {k: data.get(k, "") for k in keys}
 
 
 class Scene:

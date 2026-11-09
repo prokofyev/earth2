@@ -1,8 +1,9 @@
 """Программная отрисовка глобуса средствами pygame.
 
 Ортографическая проекция, отсечение задних граней, плоская заливка граней
-с простым освещением. Сначала рисуется слой воды, потом суша, каждый слой —
-от дальних граней к ближним (алгоритм художника).
+с простым освещением. Модель — одна замкнутая поверхность (океан на уровне
+моря, суша поднята над ним), грани рисуются от дальних к ближним (алгоритм
+художника). Высокие горы обратной стороны выглядывают за край океана.
 """
 
 from __future__ import annotations
@@ -13,8 +14,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pygame
 
-from .geo import latlon_to_vec, lon_delta, wrap_lon
-from .model import EarthModel
+from .geo import latlon_to_vec, lon_delta, vec_to_latlon, wrap_lon
+from .model import WATER_COLOR, EarthModel
 
 MAX_PITCH = 75.0
 MIN_ZOOM = 1.0
@@ -24,9 +25,10 @@ GLOBE_FILL = 0.85  # доля меньшей стороны области, ко
 _LIGHT = np.array([-0.45, 0.55, 0.70])
 _LIGHT = _LIGHT / np.linalg.norm(_LIGHT)
 _AMBIENT = 0.55
-_LIMB_DEPTH = 0.35  # насколько за край заглядываем в поисках выступающей суши
-_UNDERLAY_RADIUS = 1.0
-_UNDERLAY = (50, 108, 150)  # цвет воды у края диска (с учётом освещения)
+_SEAM_PX = 0.6  # на сколько пикселей раздвигаем грани, чтобы закрыть швы
+_SEAM_PX_RIM = 1.0  # то же за кругом океана, где под гранями космос
+_OUTER_RADIUS = 1.0  # самая высокая точка модели — всё, что видно, внутри этого круга
+_DISK_KEY = (255, 0, 255)
 
 
 def view_matrix(center_lat: float, center_lon: float) -> np.ndarray:
@@ -84,9 +86,11 @@ class GlobeRenderer:
     face_colors: np.ndarray | None = None  # замена цветов граней (отладочная раскраска)
 
     def __post_init__(self) -> None:
-        c = self.model.centers
-        radial = (self.model.normals * c).sum(axis=1) / np.linalg.norm(c, axis=1)
-        self._lying = radial > 0.6
+        # Насколько за край океана может выглядывать гора высотой до радиуса 1:
+        # точка с глубиной −d видна за кругом океана, пока √(1 − d²) > радиус моря.
+        sea = self.model.sea_radius
+        self._limb_depth = math.sqrt(max(0.0, 1.0 - sea * sea)) + 0.02
+        self._radius_grid: np.ndarray | None = None
 
     def scale_for(self, rect: pygame.Rect) -> float:
         return min(rect.width, rect.height) / 2 * GLOBE_FILL * self.view.zoom
@@ -113,44 +117,47 @@ class GlobeRenderer:
         cx, cy = rect.center
 
         n = m.normals @ rot.T
-        # Рисуем лицевые грани ближнего полушария, а за краем — только те, что
-        # выступают за силуэт водной сферы (приподнятая суша у края планеты).
-        # Остальные грани обратной стороны отбрасываем: иначе стенки суши
-        # рисовались бы поверх ближней воды (суша идёт вторым слоем).
+        # Берём лицевые грани ближней стороны и сушу обратной стороны не глубже
+        # _limb_depth: горы там выглядывают за край океана.
         cz = m.centers @ rot[2]
-        facing = n[:, 2] > 0.0
-        cand = np.nonzero(facing & (cz > -_LIMB_DEPTH))[0]
-        verts = m.tris[cand] @ rot.T  # (N,3,3)
-        beyond_limb = (verts[:, :, 0] ** 2 + verts[:, :, 1] ** 2).max(axis=1) > 1.0
-        # За краем оставляем только «лежачие» грани (верх суши), без стенок
-        # берегов: иначе у края торчат зубцы с просветами космоса между ними.
-        lying = self._lying[cand]
-        keep = (cz[cand] > 0.0) | (beyond_limb & lying)
-        idx, verts = cand[keep], verts[keep]
-        depth = verts[:, :, 2].mean(axis=1)
-
-        # Подложка — круг водного цвета: закрывает щели между гранями у края диска.
-        pygame.draw.circle(surf, _UNDERLAY, (cx, cy), scale * _UNDERLAY_RADIUS)
-
-        # Сначала вода (слой 0), потом суша (слой 1); внутри слоя — от дальних к ближним.
-        layer = (~m.is_water[idx]).astype(np.int8)
-        order_local = np.lexsort((depth, layer))
-        idx = idx[order_local]
-        verts = verts[order_local]
+        idx = np.nonzero((n[:, 2] > 0.0) & (cz > -self._limb_depth))[0]
+        verts = m.tris[idx] @ rot.T  # (N,3,3)
+        front = cz[idx] >= 0.0
+        water = m.is_water[idx]
+        reach = (verts[:, :, 0] ** 2 + verts[:, :, 1] ** 2).max(axis=1)
+        # Вода и суша обратной стороны, целиком лежащие внутри круга океана, не видны.
+        keep = front | (~water & (reach > m.sea_radius**2))
+        idx, verts, front, water = idx[keep], verts[keep], front[keep], water[keep]
+        # Порядок: суша обратной стороны → (круг океана) → вода → суша ближней стороны,
+        # внутри группы — от дальних граней к ближним.
+        group = np.where(~front, 0, np.where(water, 1, 2))
+        order_local = np.lexsort((verts[:, :, 2].mean(axis=1), group))
+        idx, verts, group = idx[order_local], verts[order_local], group[order_local]
 
         pts = np.empty((len(idx), 3, 2))
         pts[:, :, 0] = cx + verts[:, :, 0] * scale
         pts[:, :, 1] = cy - verts[:, :, 1] * scale
+        # Заливка соседних треугольников в pygame оставляет одиночные пиксели на
+        # швах. На фоне космоса (горы за краем океана) они видны как точки —
+        # поэтому раздвигаем вершины каждой грани от её центра на полпикселя.
+        # За кругом океана подложки нет — там раздвигаем сильнее.
+        mid = pts.mean(axis=1, keepdims=True)
+        out = pts - mid
+        reach_px = np.hypot(pts[:, :, 0] - cx, pts[:, :, 1] - cy).max(axis=1)
+        seam = np.where(reach_px > scale * m.sea_radius - 1, _SEAM_PX_RIM, _SEAM_PX)
+        pts_fill = pts + out / np.maximum(np.linalg.norm(out, axis=2, keepdims=True), 1e-6) * seam[:, None, None]
 
         light = _AMBIENT + (1 - _AMBIENT) * np.clip(n[idx] @ _LIGHT, 0, 1)
         base = m.colors if self.face_colors is None else self.face_colors
         colors = base[idx].astype(np.float32)
+        lit = np.zeros(len(idx), bool)  # подсвеченные грани
         if highlights:
             for hl in highlights:
                 mask = hl.faces[idx]
                 if mask.any():
                     k = float(np.clip(hl.strength, 0, 1))
                     colors[mask] = colors[mask] * (1 - k) + np.array(hl.color, np.float32) * k
+                    lit |= mask
         colors = np.clip(colors * light[:, None], 0, 255).astype(np.uint8)
 
         # Отбрасываем грани, которые на экране целиком за пределами области.
@@ -160,35 +167,101 @@ class GlobeRenderer:
             & (pts[:, :, 1].max(1) >= rect.top)
             & (pts[:, :, 1].min(1) <= rect.bottom)
         )
-        idx, pts, colors = idx[on_screen], pts[on_screen], colors[on_screen]
+        idx, pts, colors, group, lit = idx[on_screen], pts[on_screen], colors[on_screen], group[on_screen], lit[on_screen]
+        pts_fill, reach_px = pts_fill[on_screen], reach_px[on_screen]
 
         polygon = pygame.draw.polygon
-        for poly, col in zip(pts.round().astype(np.int32).tolist(), colors.tolist()):
+        # Океан — гладкая сфера: рисуем его одним готовым кругом, а не тысячами
+        # треугольников. Грани воды остаются в кадре для тыка и рисуются, только
+        # когда их подсвечивают (или в отладочной раскраске).
+        draw_face = (group != 1) | lit | (self.face_colors is not None)
+        sel = np.nonzero(draw_face)[0]
+        polys = pts_fill[sel].round().astype(np.int32).tolist()
+        cols = colors[sel].tolist()
+        n_back = int(np.searchsorted(group[sel], 1))
+        for poly, col in zip(polys[:n_back], cols[:n_back]):
             polygon(surf, col, poly)
+        disk = self._ocean_disk(scale * m.sea_radius)
+        surf.blit(disk, (cx - disk.get_width() // 2, cy - disk.get_height() // 2))
+        for poly, col in zip(polys[n_back:], cols[n_back:]):
+            polygon(surf, col, poly)
+        # За кругом океана подложки нет: швы между гранями там видны точками
+        # космоса, поэтому такие грани ещё и обводим. Стенки обрывов, видные
+        # строго с ребра (тоньше 0,1 пикселя), не обводим: иначе у края торчит
+        # «забор» из линий.
+        rim = np.nonzero(reach_px[sel] > scale * m.sea_radius - 1)[0]
+        if len(rim):
+            rp = pts[sel[rim]]
+            e = rp[:, [1, 2, 0]] - rp
+            longest = np.sqrt((e**2).sum(axis=2)).max(axis=1)
+            area2 = np.abs(e[:, 0, 0] * e[:, 1, 1] - e[:, 0, 1] * e[:, 1, 0])
+            for k in rim[area2 > 0.1 * np.maximum(longest, 1e-6)].tolist():
+                polygon(surf, cols[k], polys[k], 1)
 
         if outside is not None:
             self._clip_to_disk(surf, rect, (cx, cy), scale, outside)
         self.frame = Frame(order=idx, pts=pts, rot=rot, scale=scale, center=(cx, cy))
 
+    def _ocean_disk(self, radius: float) -> pygame.Surface:
+        """Круг океана с освещением гладкой сферы (свет задан в координатах экрана)."""
+        key = round(radius * 2) / 2 + 2  # на 2 пикселя шире: стыки обрывов с краем океана без щелей
+        cache = self.__dict__.setdefault("_disk_cache", {})
+        disk = cache.get(key)
+        if disk is None:
+            size = 2 * int(math.ceil(key)) + 3
+            c = (size - 1) / 2
+            x, y = np.meshgrid(np.arange(size) - c, np.arange(size) - c, indexing="ij")
+            r2 = (x * x + y * y) / (key * key)
+            inside = r2 <= 1.0
+            nz = np.sqrt(np.clip(1.0 - r2, 0.0, 1.0))
+            dot = (x / key) * _LIGHT[0] + (-y / key) * _LIGHT[1] + nz * _LIGHT[2]
+            light = _AMBIENT + (1 - _AMBIENT) * np.clip(dot, 0, 1)
+            rgb = np.clip(np.array(WATER_COLOR, float) * light[..., None], 0, 255).astype(np.uint8)
+            rgb[~inside] = _DISK_KEY
+            disk = pygame.surfarray.make_surface(rgb)
+            disk.set_colorkey(_DISK_KEY)
+            if pygame.display.get_surface() is not None:
+                disk = disk.convert()
+                disk.set_colorkey(_DISK_KEY)
+            if len(cache) > 32:  # при плавном зуме радиусы меняются — не копим лишнее
+                cache.clear()
+            cache[key] = disk
+        return disk
+
     def _clip_to_disk(self, surf, rect, center, scale, outside) -> None:
-        """Закрашивает всё за кругом глобуса цветом фона (атмосферу рисует GlobeWidget)."""
+        """Закрашивает всё за кругом радиуса 1 цветом фона — страховка от осколков за силуэтом."""
         key = (rect.size, center[0] - rect.left, center[1] - rect.top, round(scale, 2), tuple(outside))
         if getattr(self, "_mask_key", None) != key:
             hole = (255, 0, 255) if tuple(outside) != (255, 0, 255) else (0, 255, 0)
             mask = pygame.Surface(rect.size)
             mask.fill(outside)
             pygame.draw.circle(mask, hole, (center[0] - rect.left, center[1] - rect.top),
-                               scale * _UNDERLAY_RADIUS)
+                               scale * _OUTER_RADIUS + 1)
             mask.set_colorkey(hole)
             self._mask, self._mask_key = mask, key
         surf.blit(self._mask, rect.topleft)
 
     # --- Геометрия экрана -------------------------------------------------
 
+    def surface_radius(self, lat, lon) -> np.ndarray:
+        """Радиус поверхности модели над точкой (lat, lon) — для меток на рельефе."""
+        if self._radius_grid is None:
+            self._radius_grid = _radius_grid(self.model)
+        g = self._radius_grid
+        rows, cols = g.shape
+        y = np.clip((90.0 - np.asarray(lat, float)) / _GRID_DEG, 0, rows - 1.000001)
+        x = (np.asarray(lon, float) + 180.0) / _GRID_DEG
+        i0, j0 = np.floor(y).astype(int), np.floor(x).astype(int)
+        fy, fx = y - i0, x - j0
+        i1, ja, jb = np.minimum(i0 + 1, rows - 1), j0 % cols, (j0 + 1) % cols
+        return ((g[i0, ja] * (1 - fx) + g[i0, jb] * fx) * (1 - fy)
+                + (g[i1, ja] * (1 - fx) + g[i1, jb] * fx) * fy)
+
     def project_latlon(self, lat, lon) -> tuple[np.ndarray, np.ndarray]:
-        """Экранные координаты точек (lat, lon) и маска видимости (лицевая сторона)."""
+        """Экранные координаты точек (lat, lon) на поверхности рельефа и маска видимости."""
         fr = self.frame
-        v = latlon_to_vec(np.asarray(lat, float), np.asarray(lon, float)) @ fr.rot.T
+        lat, lon = np.asarray(lat, float), np.asarray(lon, float)
+        v = latlon_to_vec(lat, lon) * self.surface_radius(lat, lon)[..., None] @ fr.rot.T
         xy = np.stack([fr.center[0] + v[..., 0] * fr.scale, fr.center[1] - v[..., 1] * fr.scale], -1)
         return xy, v[..., 2] > 0
 
@@ -197,7 +270,7 @@ class GlobeRenderer:
         fr = self.frame
         if fr is None or len(fr.order) == 0:
             return None
-        if math.dist(pos, fr.center) > fr.scale * _UNDERLAY_RADIUS:
+        if math.dist(pos, fr.center) > fr.scale * _OUTER_RADIUS:
             return None  # за кругом глобуса — космос
         inside = _points_in_triangles(np.asarray(pos, float), fr.pts)
         hits = np.nonzero(inside)[0]
@@ -206,21 +279,29 @@ class GlobeRenderer:
         return int(fr.order[hits[-1]])
 
     def screen_to_latlon(self, pos: tuple[float, float]) -> tuple[float, float] | None:
-        """Точка на сфере под курсором (по пересечению с единичной сферой)."""
+        """Точка поверхности под курсором: пересечение луча взгляда с гранью, нарисованной сверху."""
         fr = self.frame
         if fr is None:
             return None
         x = (pos[0] - fr.center[0]) / fr.scale
         y = -(pos[1] - fr.center[1]) / fr.scale
-        r2 = x * x + y * y
+        face = self.pick_face(pos)
+        if face is not None:
+            a, b, c = self.model.tris[face] @ fr.rot.T
+            n = np.cross(b - a, c - a)
+            if abs(n[2]) > 1e-12:  # плоскость грани: n·(p − a) = 0, p = (x, y, z)
+                z = a[2] - (n[0] * (x - a[0]) + n[1] * (y - a[1])) / n[2]
+                v = fr.rot.T @ np.array([x, y, z])
+                ll = vec_to_latlon(v)
+                return float(ll[0]), float(ll[1])
+        # Мимо граней — точка на сфере уровня моря (или на её краю).
+        sea = self.model.sea_radius
+        r2 = (x * x + y * y) / (sea * sea)
         if r2 > 1.0:
-            x, y = x / math.sqrt(r2), y / math.sqrt(r2)
-            r2 = 1.0
-        v_view = np.array([x, y, math.sqrt(max(0.0, 1.0 - r2))])
-        v = fr.rot.T @ v_view
-        lat = math.degrees(math.asin(max(-1.0, min(1.0, v[1]))))
-        lon = -math.degrees(math.atan2(v[2], v[0]))
-        return lat, lon
+            x, y, r2 = x / math.sqrt(r2), y / math.sqrt(r2), 1.0
+        v = fr.rot.T @ np.array([x, y, sea * math.sqrt(max(0.0, 1.0 - r2))])
+        ll = vec_to_latlon(v)
+        return float(ll[0]), float(ll[1])
 
     def distance_to_faces(self, pos: tuple[float, float], faces: np.ndarray) -> float:
         """Экранное расстояние от точки до ближайшей видимой грани из маски faces."""
@@ -283,6 +364,24 @@ def ease_view_towards(view: View, lat: float, lon: float, zoom: float, k: float)
     if done:
         view.center_lat, view.center_lon, view.zoom = lat, wrap_lon(lon), zoom
     return done
+
+
+_GRID_DEG = 0.5
+
+
+def _radius_grid(model: EarthModel) -> np.ndarray:
+    """Наибольший радиус поверхности в клетках 0,5° — по точкам внутри граней."""
+    rows, cols = int(180 / _GRID_DEG), int(360 / _GRID_DEG)
+    grid = np.full(rows * cols, model.sea_radius)
+    k = 6
+    w = np.array([(i / k, j / k) for i in range(k + 1) for j in range(k + 1 - i)])
+    w = np.c_[1 - w.sum(axis=1), w]
+    pts = np.einsum("pk,fkd->fpd", w, model.tris).reshape(-1, 3)
+    ll = vec_to_latlon(pts)
+    i = np.clip(((90.0 - ll[:, 0]) / _GRID_DEG).astype(int), 0, rows - 1)
+    j = ((ll[:, 1] + 180.0) / _GRID_DEG).astype(int) % cols
+    np.maximum.at(grid, i * cols + j, np.linalg.norm(pts, axis=1))
+    return grid.reshape(rows, cols)
 
 
 # --- Векторная геометрия на плоскости -------------------------------------

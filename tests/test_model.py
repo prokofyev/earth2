@@ -1,43 +1,64 @@
 import numpy as np
-import pygame
+import pytest
 
-from globe_quiz import ASSETS_DIR
-from globe_quiz.model import SURFACE_LAND, SURFACE_WATER, load_earth
+from globe_quiz.model import (
+    HEIGHT_BANDS,
+    ICE_COLOR,
+    SAND_COLOR,
+    SURFACE_ICE,
+    SURFACE_LAND,
+    SURFACE_WATER,
+    WATER_COLOR,
+)
 
 from .conftest import face_at
 
 
-def test_model_has_all_faces():
-    # Исходная модель без дополнений (острова — в test_islands.py).
-    assert len(load_earth(with_islands=False)) == 9187
+def test_model_size(earth):
+    assert 10000 <= len(earth) <= 12000
+    assert earth.sea_radius == pytest.approx(0.762, abs=0.01)
 
 
-def test_each_face_has_one_palette_color(earth):
-    palette = pygame.surfarray.array3d(pygame.image.load(str(ASSETS_DIR / "earth.png")))
-    palette_colors = {tuple(c) for c in palette.reshape(-1, 3)}
-    assert earth.colors.shape == (len(earth), 3)
-    assert {tuple(c) for c in earth.colors.tolist()} <= palette_colors
-
-
-def test_sphere_is_centered_and_unit(earth):
+def test_highest_point_on_unit_radius(earth):
     r = np.linalg.norm(earth.tris.reshape(-1, 3), axis=1)
-    assert abs(np.median(r) - 1.0) < 0.05
-    # Если центр сферы подобран неверно, радиусы расходятся на ±0.14.
-    assert r.min() > 0.95 and r.max() < 1.15
-
-
-def test_known_points_land_and_water(earth):
-    assert earth.surface[face_at(earth, -30, -70)] == SURFACE_LAND  # Анды
-    assert earth.surface[face_at(earth, 0, -150)] == SURFACE_WATER  # Тихий океан
-    assert earth.surface[face_at(earth, 15, 20)] == SURFACE_LAND  # Африка (Сахара)
-
-
-def test_map_is_not_mirrored(earth):
-    # Австралия на востоке (+125°), Анды на западе (−70°).
-    assert earth.surface[face_at(earth, -25, 125)] == SURFACE_LAND
-    assert earth.surface[face_at(earth, -25, -125)] == SURFACE_WATER
+    assert r.max() == pytest.approx(1.0, abs=1e-5)
+    assert r.min() == pytest.approx(earth.sea_radius, abs=1e-5)
 
 
 def test_normals_point_outward(earth):
-    # У береговых стенок островов нормаль перпендикулярна радиусу — допускаем ноль.
-    assert ((earth.normals * earth.centers).sum(axis=1) >= -1e-9).all()
+    # В исходном STL ~7 % граней — складки у обрывов, повёрнутые внутрь; упрощение
+    # их наследует, а при отрисовке их скрывает отсечение задних граней.
+    outward = (earth.normals * earth.centers).sum(axis=1) > 0
+    assert outward.mean() > 0.9
+
+
+def test_water_is_at_sea_level(earth):
+    r = np.linalg.norm(earth.tris[earth.is_water], axis=2)
+    assert np.allclose(r, earth.sea_radius, atol=1e-5)
+    assert (earth.colors[earth.is_water] == WATER_COLOR).all()
+
+
+@pytest.mark.parametrize("lat, lon, surface", [
+    (-30, -70, SURFACE_LAND),  # Анды
+    (0, -150, SURFACE_WATER),  # Тихий океан
+    (25, 5, SURFACE_LAND),  # Сахара
+    (-25, 125, SURFACE_LAND),  # Австралия (не зеркально)
+    (-25, -125, SURFACE_WATER),
+    (-80, 0, SURFACE_ICE),  # Антарктида
+    (72, -40, SURFACE_ICE),  # Гренландия
+    (87, 0, SURFACE_ICE),  # шапка у Северного полюса
+])
+def test_known_points(earth, lat, lon, surface):
+    assert earth.surface[face_at(earth, lat, lon)] == surface
+
+
+def test_colors_by_height_and_place(earth):
+    assert tuple(earth.colors[face_at(earth, 25, 5)]) == SAND_COLOR  # Сахара
+    assert tuple(earth.colors[face_at(earth, 23, 47)]) == SAND_COLOR  # Аравия
+    assert tuple(earth.colors[face_at(earth, -80, 0)]) == ICE_COLOR
+    assert tuple(earth.colors[face_at(earth, 55, 40)]) == HEIGHT_BANDS[0][1]  # Восточно-Европейская равнина
+    snow = HEIGHT_BANDS[-1][1]
+    tibet = (abs(earth.latlon[:, 0] - 34) < 6) & (abs(earth.latlon[:, 1] - 88) < 10)
+    assert (earth.colors[tibet] == snow).all(axis=1).any()  # белые вершины Тибета
+    andes = (abs(earth.latlon[:, 0] + 20) < 10) & (abs(earth.latlon[:, 1] + 68) < 5)
+    assert (earth.height[andes] > 6).any()  # Анды — горы

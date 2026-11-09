@@ -11,9 +11,8 @@ from pathlib import Path
 from . import PROJECT_DIR
 
 PROGRESS_PATH = PROJECT_DIR / "progress.json"
-VERSION = 2
+VERSION = 3  # 3 — восемь уровней и рельефная модель; файлы прежних версий не переносятся
 MAX_NAME_LENGTH = 16
-LEGACY_PLAYER = "Игрок"  # в него переносится прогресс из файла версии 1
 
 
 @dataclass
@@ -97,11 +96,10 @@ class Players:
 
     @classmethod
     def from_json(cls, data: dict) -> "Players":
-        version = data.get("version")
-        if version == 1:  # старый формат — один безымянный игрок
-            return cls({LEGACY_PLAYER: Progress.from_json(data)}, LEGACY_PLAYER)
-        if version != VERSION:
-            raise ValueError("неизвестная версия файла прогресса")
+        if data.get("version") != VERSION:
+            # Прогресс прежних версий игры (семь уровней, старая модель Земли) не переносим:
+            # начинаем с чистого листа, а старый файл заменится при первом сохранении.
+            raise ValueError("файл прогресса другой версии")
         players = {clean_name(str(n)): Progress.from_json(p) for n, p in data.get("players", {}).items()}
         players.pop("", None)
         current = data.get("current")

@@ -1,8 +1,10 @@
-"""Загрузка модели Земли из glTF в массивы numpy.
+"""Рельефная модель Земли: загрузка готовой сетки и раскраска.
 
-Модель — низкополигональная Земля с палитрой: у каждой грани ровно один цвет.
-Океан — отдельная оболочка под сушей; её скрытые части не удаляются,
-а закрываются сушей при отрисовке (вода рисуется первым слоем).
+Сетка заранее получена из assets/World-Full-Final.STL инструментом
+tools/convert_stl.py и лежит в assets/earth_relief.npz. Это одна замкнутая
+поверхность: океан — грани на уровне моря, суша поднята над ним (высоты
+преувеличены, как в исходной модели). Цветов в исходнике нет — суша
+раскрашивается по высоте, пустыни песочные, полярные области ледяные.
 """
 
 from __future__ import annotations
@@ -12,32 +14,47 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import pygame
 
-from . import ASSETS_DIR
-from .geo import vec_to_latlon
-from .islands import build_islands, load_island_outlines
+from . import ASSETS_DIR, DATA_DIR
+from .geo import point_in_polygon, vec_to_latlon
+
+MODEL_PATH = ASSETS_DIR / "earth_relief.npz"
+COLORING_PATH = DATA_DIR / "coloring.json"
 
 WATER_COLOR = (85, 177, 241)
 ICE_COLOR = (245, 247, 250)
+SAND_COLOR = (236, 204, 140)
+# Полосы высоты суши: высота над уровнем моря в единицах исходной модели (радиус Земли ≈ 52).
+# В модели вся суша приподнята: равнины лежат на высоте ≈ 2–2,6, Альпы — до 3,5,
+# Кавказ — до 6, Анды — до 9, Тибет — до 16.
+HEIGHT_BANDS = [
+    (2.7, (166, 204, 52)),  # низменности и равнины
+    (3.3, (196, 206, 90)),  # возвышенности
+    (5.0, (206, 172, 102)),  # невысокие горы и плоскогорья
+    (9.0, (170, 125, 80)),  # горы
+    (12.5, (196, 176, 156)),  # высокогорья
+    (float("inf"), (240, 240, 240)),  # снежные вершины
+]
+DESERT_MAX_HEIGHT = 6.0  # выше пустыня уже горы
+ANTARCTIC_LAT = -60.0  # южнее суша — лёд Антарктиды
+ARCTIC_CAP_LAT = 78.0  # севернее суша — полярная ледяная шапка
 
 SURFACE_WATER = 0
 SURFACE_LAND = 1
 SURFACE_ICE = 2
 SURFACE_NAMES = {"water": SURFACE_WATER, "land": SURFACE_LAND, "ice": SURFACE_ICE}
 
-_COMPONENT = {5125: np.uint32, 5123: np.uint16, 5126: np.float32}
-_WIDTH = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
-
 
 @dataclass
 class EarthModel:
-    tris: np.ndarray  # (F, 3, 3) вершины граней, сфера радиуса ~1 с центром в нуле
+    tris: np.ndarray  # (F, 3, 3) вершины граней; самая высокая точка на радиусе 1
     normals: np.ndarray  # (F, 3) внешние нормали граней
     centers: np.ndarray  # (F, 3) центры граней
-    colors: np.ndarray  # (F, 3) uint8 цвет грани из палитры
+    colors: np.ndarray  # (F, 3) uint8
     surface: np.ndarray  # (F,) int8: SURFACE_WATER / SURFACE_LAND / SURFACE_ICE
     latlon: np.ndarray  # (F, 2) широта и долгота центра грани, градусы
+    height: np.ndarray  # (F,) средняя высота грани над уровнем моря (единицы исходной модели)
+    sea_radius: float = 1.0  # радиус уровня моря
 
     @property
     def is_water(self) -> np.ndarray:
@@ -47,80 +64,62 @@ class EarthModel:
         return len(self.tris)
 
 
-def _read_accessor(gltf: dict, buf: bytes, index: int) -> np.ndarray:
-    acc = gltf["accessors"][index]
-    view = gltf["bufferViews"][acc["bufferView"]]
-    dtype = np.dtype(_COMPONENT[acc["componentType"]])
-    width = _WIDTH[acc["type"]]
-    offset = view.get("byteOffset", 0) + acc.get("byteOffset", 0)
-    stride = view.get("byteStride", width * dtype.itemsize) // dtype.itemsize
-    count = acc["count"]
-    raw = np.frombuffer(buf, dtype=dtype, offset=offset, count=(count - 1) * stride + width)
-    return np.lib.stride_tricks.as_strided(
-        raw, shape=(count, width), strides=(stride * dtype.itemsize, dtype.itemsize)
-    ).copy()
+def height_color(h: np.ndarray) -> np.ndarray:
+    out = np.empty((len(h), 3), np.uint8)
+    lower = -np.inf
+    for top, color in HEIGHT_BANDS:
+        out[(h >= lower) & (h < top)] = color
+        lower = top
+    return out
 
 
-def fit_sphere(points: np.ndarray) -> tuple[np.ndarray, float]:
-    """Сфера, лучше всего описывающая точки (метод наименьших квадратов)."""
-    a = np.c_[2 * points, np.ones(len(points))]
-    b = (points**2).sum(axis=1)
-    sol = np.linalg.lstsq(a, b, rcond=None)[0]
-    center = sol[:3]
-    radius = float(np.sqrt(sol[3] + center @ center))
-    return center, radius
+def _in_any(latlon: np.ndarray, polygons) -> np.ndarray:
+    inside = np.zeros(len(latlon), bool)
+    for poly in polygons:
+        poly = np.asarray(poly, float)
+        for shift in (-360.0, 0.0, 360.0):
+            inside |= point_in_polygon(latlon[:, 0], latlon[:, 1] + shift, poly)
+    return inside
 
 
-def load_earth(assets_dir: Path = ASSETS_DIR, with_islands: bool = True) -> EarthModel:
-    """Модель из glTF. with_islands — дописать острова из islands.json (см. islands.py)."""
-    gltf = json.loads((assets_dir / "earth.gltf").read_text())
-    buf = (assets_dir / gltf["buffers"][0]["uri"]).read_bytes()
-    prim = gltf["meshes"][0]["primitives"][0]
-    pos = _read_accessor(gltf, buf, prim["attributes"]["POSITION"]).astype(np.float64)
-    uv = _read_accessor(gltf, buf, prim["attributes"]["TEXCOORD_0"])
-    idx = _read_accessor(gltf, buf, prim["indices"]).reshape(-1, 3)
+def classify(latlon: np.ndarray, vertex_heights: np.ndarray, coloring: dict) -> tuple[np.ndarray, np.ndarray]:
+    """Тип поверхности и цвет граней по высотам их вершин (F, 3) и широте/долготе центров."""
+    h = vertex_heights.mean(axis=1)
+    water = (vertex_heights <= 0).all(axis=1)
+    lat = latlon[:, 0]
+    ice = ~water & ((lat < ANTARCTIC_LAT) | (lat > ARCTIC_CAP_LAT) | _in_any(latlon, [coloring["greenland"]]))
+    desert = ~water & ~ice & (h < DESERT_MAX_HEIGHT) & _in_any(latlon, [d["polygon"] for d in coloring["deserts"]])
 
-    image_path = assets_dir / gltf["images"][0]["uri"]
-    palette = pygame.surfarray.array3d(pygame.image.load(str(image_path)))  # (W, H, 3)
-    w, h = palette.shape[:2]
+    surface = np.full(len(h), SURFACE_LAND, np.int8)
+    surface[water] = SURFACE_WATER
+    surface[ice] = SURFACE_ICE
+    colors = height_color(h)
+    colors[desert] = SAND_COLOR
+    colors[ice] = ICE_COLOR
+    colors[water] = WATER_COLOR
+    return surface, colors
 
-    center, radius = fit_sphere(pos)
-    pos = (pos - center) / radius
-    tris = pos[idx]
 
-    face_uv = uv[idx].mean(axis=1)
-    px = np.clip((face_uv[:, 0] * w).astype(int), 0, w - 1)
-    py = np.clip((face_uv[:, 1] * h).astype(int), 0, h - 1)
-    colors = palette[px, py].astype(np.uint8)
-
-    surface = np.full(len(tris), SURFACE_LAND, dtype=np.int8)
-    surface[(colors == WATER_COLOR).all(axis=1)] = SURFACE_WATER
-    surface[(colors == ICE_COLOR).all(axis=1)] = SURFACE_ICE
-
+def load_earth(path: Path = MODEL_PATH, coloring_path: Path = COLORING_PATH) -> EarthModel:
+    data = np.load(path)
+    verts = data["vertices"].astype(np.float64)
+    faces = data["faces"]
+    vh = data["heights"].astype(np.float64)[faces]  # (F, 3)
+    tris = verts[faces]
     centers = tris.mean(axis=1)
+    # Грани обходятся против часовой стрелки снаружи — нормаль по обходу, без разворотов.
     normals = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
-    lengths = np.linalg.norm(normals, axis=1)
-    keep = lengths > 1e-12  # выбрасываем вырожденные грани
-    normals = normals / np.where(lengths > 0, lengths, 1.0)[:, None]
-    # Материал двусторонний — разворачиваем нормали наружу.
-    flip = (normals * centers).sum(axis=1) < 0
-    normals[flip] *= -1
-
-    tris, normals, centers = tris[keep], normals[keep], centers[keep]
-    colors, surface = colors[keep], surface[keep]
-
-    if with_islands:
-        extra = build_islands(load_island_outlines())
-        tris = np.concatenate([tris, extra.tris])
-        normals = np.concatenate([normals, extra.normals])  # нормали островов — явные
-        centers = np.concatenate([centers, extra.tris.mean(axis=1)])
-        colors = np.concatenate([colors, extra.colors])
-        surface = np.concatenate([surface, np.full(len(extra.tris), SURFACE_LAND, np.int8)])
+    normals /= np.linalg.norm(normals, axis=1)[:, None]
+    latlon = vec_to_latlon(centers)
+    coloring = json.loads(Path(coloring_path).read_text(encoding="utf-8"))
+    surface, colors = classify(latlon, vh, coloring)
     return EarthModel(
         tris=tris,
         normals=normals,
         centers=centers,
         colors=colors,
         surface=surface,
-        latlon=vec_to_latlon(centers),
+        latlon=latlon,
+        height=vh.mean(axis=1),
+        sea_radius=float(data["sea_radius"]),
     )

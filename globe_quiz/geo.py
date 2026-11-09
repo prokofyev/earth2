@@ -68,3 +68,19 @@ def direction_hint(src: tuple[float, float], dst: tuple[float, float]) -> str | 
     if not parts:
         return None
     return " и ".join(parts)
+
+
+def point_in_polygon(lat: np.ndarray, lon: np.ndarray, poly: np.ndarray) -> np.ndarray:
+    """Чётно-нечётное правило на плоскости (долгота — x, широта — y)."""
+    x, y = lon, lat
+    inside = np.zeros(len(x), dtype=bool)
+    py, px = poly[:, 0], poly[:, 1]
+    n = len(poly)
+    for i in range(n):
+        j = (i - 1) % n
+        yi, yj, xi, xj = py[i], py[j], px[i], px[j]
+        cond = (yi > y) != (yj > y)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            x_cross = (xj - xi) * (y - yi) / (yj - yi) + xi
+        inside ^= cond & (x < x_cross)
+    return inside

@@ -20,6 +20,8 @@ REVEAL_COLOR = (255, 150, 60)
 
 
 def zoom_for(region: Region) -> float:
+    if region.kind == "peak":
+        return 2.5  # вершину показываем поближе
     if region.kind in ("point", "line", "hemisphere"):
         return 1.0
     r = region.radius_deg
@@ -153,9 +155,9 @@ class LevelScene(Scene):
     def _show(self, region: Region, key: str, color, fly: bool, soft=False, key_suffix="") -> None:
         g = self.app.globe
         name = f"{key}:{key_suffix}" if key_suffix else key
-        if region.kind in ("point", "line"):
-            g.set_marker(name, Marker(region.kind, *(region.at if region.kind == "point" else (region.lat, 0.0)),
-                                      color=color))
+        if region.kind in ("point", "peak", "line"):
+            at = (region.lat, 0.0) if region.kind == "line" else region.at
+            g.set_marker(name, Marker("line" if region.kind == "line" else "point", *at, color=color))
         else:
             low, high = (0.3, 0.65) if soft else (0.35, 0.8)
             g.set_glow(name, region.faces, color=color, low=low, high=high)

@@ -13,9 +13,11 @@ from .renderer import GlobeRenderer
 
 HIT_TOLERANCE_PX = 22
 POINT_TOLERANCE_DEG = 12.0  # полюса: тык не дальше 12° от полюса
+PEAK_TOLERANCE_DEG = 5.0  # вершины: на модели нет отдельных конусов — тык не дальше 5°
 LINE_TOLERANCE_DEG = 8.0  # экватор: не дальше 8° по широте
 # Для этих объектов промах «рядом» засчитывается: они маленькие или узкие.
-TOLERANT_KINDS = {"island", "peninsula", "sea", "gulf", "lake", "mountains", "desert", "point", "line"}
+TOLERANT_KINDS = {"island", "peninsula", "sea", "gulf", "lake", "mountains", "desert", "plain",
+                  "point", "peak", "line"}
 
 PRAISE = ["Молодец!", "Отлично!", "Здорово!", "Так держать!", "Верно!", "Ты настоящий географ!"]
 
@@ -50,9 +52,11 @@ def inspect_tap(renderer: GlobeRenderer, regions: RegionSet, pos) -> Tap | None:
 
 def region_hit(renderer: GlobeRenderer, region: Region, tap: Tap, pos,
                tolerance: float = HIT_TOLERANCE_PX) -> bool:
-    if region.kind == "point":
-        # У полюсов нет видимых ориентиров, поэтому допуск щедрый: по углу на сфере.
-        return (angular_distance(tap.latlon, region.at) <= POINT_TOLERANCE_DEG
+    if region.kind in ("point", "peak"):
+        # У полюсов нет видимых ориентиров, а вершины не выглядят отдельными конусами:
+        # засчитываем по углу на сфере (у полюсов допуск щедрее).
+        limit = POINT_TOLERANCE_DEG if region.kind == "point" else PEAK_TOLERANCE_DEG
+        return (angular_distance(tap.latlon, region.at) <= limit
                 or renderer.distance_to_points(pos, *region.at) <= tolerance)
     if region.kind == "line":
         return (abs(tap.latlon[0] - region.lat) <= LINE_TOLERANCE_DEG

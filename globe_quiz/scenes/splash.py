@@ -1,5 +1,5 @@
 """Заставка: название, вращающийся глобус, автор модели и лицензия со ссылками,
-пометка о дополнениях модели (лицензия CC-BY требует указывать изменения)."""
+пометка об изменениях модели (лицензия CC BY-NC требует их указывать)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import webbrowser
 import pygame
 
 from ..app import Scene
-from ..islands import island_groups, load_island_outlines
 from ..ui import ACCENT, TEXT, TEXT_DIM, draw_text, font, ui_scale
 
 LINK = (130, 190, 255)
@@ -39,9 +38,8 @@ class SplashScene(Scene):
              (c["author"], c["author_url"])],
             [("Лицензия ", None), (c["license"], c["license_url"])],
         ]
-        groups = island_groups(load_island_outlines())
-        if groups:
-            self.credit_lines.append([("Модель дополнена: " + ", ".join(groups), None)])
+        if c.get("changes"):  # лицензия требует указывать изменения
+            self.credit_lines.append([(c["changes"], None)])
 
     def layout(self, size) -> None:
         w, h = size
