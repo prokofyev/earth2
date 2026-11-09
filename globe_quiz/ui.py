@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import math
-import random
 from dataclasses import dataclass, field
 from functools import lru_cache
 
+import numpy as np
 import pygame
+
+from .renderer import View, view_matrix
 
 BG_TOP = (8, 12, 38)
 BG_BOTTOM = (22, 30, 78)
@@ -159,26 +161,129 @@ class Button:
         draw_text(surf, self.text, size, TEXT, self.rect.center)
 
 
+# Звёздное небо за Землёй: поворачивается тем же видом, что и глобус, и поэтому
+# плывёт навстречу материкам, как при облёте планеты.
+SKY_THETA_MAX = 120.0  # до какого угла от центра вида показываем небо, градусы
+SKY_EDGE_FACTOR = 1.05  # край неба — чуть дальше углов окна (в половинах диагонали)
+STAR_AREA_PX = 2500  # в среднем одна звезда на столько пикселей экрана
+
+
 class Starfield:
-    """Фон: тёмно-синий градиент со звёздами."""
+    """Фон: тёмно-синий градиент и звёздное небо, которое вращается вместе с глобусом.
 
-    def __init__(self, seed: int = 7):
+    Звёзды — постоянные направления на сфере. Они поворачиваются матрицей вида
+    глобуса, а на экран берётся задняя полусфера — небо за Землёй. Поэтому звёзды
+    плывут навстречу материкам с той же угловой скоростью, как при облёте Земли.
+    На экран небо ложится равновеликой азимутальной проекцией Ламберта с центром
+    в середине окна: густота звёзд везде одинаковая, звёзды появляются и исчезают
+    только за краями окна. Зум неба не касается.
+    """
+
+    def __init__(self, seed: int = 7, view=None):
         self._seed = seed
-        self._cache: pygame.Surface | None = None
+        self.view = view  # renderer.View глобуса; None — вид по умолчанию
+        self._size: tuple[int, int] | None = None
+        self._bg: pygame.Surface | None = None
+        self._sky: pygame.Surface | None = None
+        self._sky_key = None
+        self._last_key = None
+        self._sprites: dict[tuple[int, int], pygame.Surface] = {}
+        self.render_count = 0
 
-    def draw(self, surf: pygame.Surface) -> None:
-        if self._cache is None or self._cache.get_size() != surf.get_size():
-            w, h = surf.get_size()
-            bg = pygame.Surface((w, h)).convert()
+    # --- Геометрия -------------------------------------------------------------
+
+    def _prepare(self, size: tuple[int, int]) -> None:
+        w, h = size
+        self._size = size
+        # Проекция Ламберта: точка под углом θ от центра — на расстоянии 2R·sin(θ/2).
+        # R — сколько пикселей на радиан у центра экрана.
+        edge = SKY_EDGE_FACTOR * math.hypot(w, h) / 2
+        self.radius = edge / (2 * math.sin(math.radians(SKY_THETA_MAX) / 2))
+        # Вся сфера занимает 4πR² пикселей — столько звёзд, чтобы густота была прежней.
+        n = int(4 * math.pi * self.radius**2 / STAR_AREA_PX)
+        rng = np.random.default_rng(self._seed)
+        dirs = rng.normal(size=(n, 3))
+        self._dirs = dirs / np.linalg.norm(dirs, axis=1)[:, None]
+        self._bright = rng.integers(120, 256, n)
+        self._big = rng.random(n) < 0.25
+        self._bg = None
+        self._sky_key = None
+        self._last_key = None
+
+    def _view_angles(self) -> tuple[float, float]:
+        v = self.view if self.view is not None else View()
+        return v.center_lat, v.center_lon
+
+    def star_positions(self, size: tuple[int, int], lat: float, lon: float) -> tuple[np.ndarray, np.ndarray]:
+        """Экранные координаты видимых звёзд (K, 2) и их номера (K,) для вида (lat, lon)."""
+        if size != self._size:
+            self._prepare(size)
+        w, h = size
+        v = self._dirs @ view_matrix(lat, lon).T
+        # Небо за Землёй: θ отсчитывается от направления «от зрителя» (−z).
+        idx = np.nonzero(-v[:, 2] > math.cos(math.radians(SKY_THETA_MAX)))[0]
+        k = self.radius * np.sqrt(2.0 / (1.0 - v[idx, 2]))  # 2R·sin(θ/2) / sin θ
+        xy = np.stack([w / 2 + v[idx, 0] * k, h / 2 - v[idx, 1] * k], axis=1)
+        on = (xy[:, 0] > -3) & (xy[:, 0] < w + 3) & (xy[:, 1] > -3) & (xy[:, 1] < h + 3)
+        return xy[on], idx[on]
+
+    # --- Рисование -------------------------------------------------------------
+
+    def _gradient(self, size: tuple[int, int]) -> pygame.Surface:
+        if self._bg is None:
+            w, h = size
+            bg = pygame.Surface((w, h))
+            if pygame.display.get_surface() is not None:
+                bg = bg.convert()
             for y in range(h):
                 t = y / max(1, h - 1)
                 c = [int(a + (b - a) * t) for a, b in zip(BG_TOP, BG_BOTTOM)]
                 pygame.draw.line(bg, c, (0, y), (w, y))
-            rng = random.Random(self._seed)
-            for _ in range(w * h // 2500):
-                x, y = rng.randrange(w), rng.randrange(h)
-                b = rng.randint(120, 255)
-                r = rng.choice([1, 1, 1, 2])
-                pygame.draw.circle(bg, (b, b, min(255, b + 20)), (x, y), r)
-            self._cache = bg
-        surf.blit(self._cache, (0, 0))
+            self._bg = bg
+        return self._bg
+
+    def _sprite(self, bright: int, big: bool) -> pygame.Surface:
+        key = (bright, big)
+        spr = self._sprites.get(key)
+        if spr is None:
+            r = 2 if big else 1
+            spr = pygame.Surface((2 * r + 1, 2 * r + 1))
+            spr.fill((0, 0, 0))
+            spr.set_colorkey((0, 0, 0))
+            pygame.draw.circle(spr, (bright, bright, min(255, bright + 20)), (r, r), r)
+            self._sprites[key] = spr
+        return spr
+
+    def _paint(self, target: pygame.Surface, size, lat: float, lon: float) -> None:
+        target.blit(self._gradient(size), (0, 0))
+        xy, idx = self.star_positions(size, lat, lon)
+        seq = []
+        for (x, y), i in zip(xy.astype(int).tolist(), idx.tolist()):
+            big = bool(self._big[i])
+            r = 2 if big else 1
+            seq.append((self._sprite(int(self._bright[i]), big), (x - r, y - r)))
+        target.blits(seq, doreturn=False)
+        self.render_count += 1
+
+    def draw(self, surf: pygame.Surface) -> None:
+        size = surf.get_size()
+        if size != self._size:
+            self._prepare(size)
+        lat, lon = self._view_angles()
+        key = (size, round(lat, 3), round(lon, 3))
+        if key == self._sky_key:  # глобус стоит — готовое небо из кеша
+            surf.blit(self._sky, (0, 0))
+            return
+        if key == self._last_key:
+            # Второй кадр без поворота: сохраняем небо в кеш, дальше — только копия.
+            if self._sky is None or self._sky.get_size() != size:
+                self._sky = pygame.Surface(size)
+                if pygame.display.get_surface() is not None:
+                    self._sky = self._sky.convert()
+            self._paint(self._sky, size, lat, lon)
+            self._sky_key = key
+            surf.blit(self._sky, (0, 0))
+            return
+        # Глобус вращается: рисуем сразу на экран, без лишней копии через кеш.
+        self._paint(surf, size, lat, lon)
+        self._last_key = key

@@ -79,6 +79,7 @@ class App:
         self.players: Players = load_players()
         self.credits = model_credits()
         self.globe = GlobeWidget(GlobeRenderer(self.model))
+        self.starfield.view = self.globe.view  # небо вращается вместе с глобусом
         self.clock = pygame.time.Clock()
         self.running = True
         self._size = None
