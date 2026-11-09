@@ -112,8 +112,19 @@ class GlobeWidget:
     def zoom_by(self, factor: float) -> None:
         self.target_zoom = max(MIN_ZOOM, min(MAX_ZOOM, self.target_zoom * factor))
 
-    def fly_to(self, lat: float, lon: float, zoom: float | None = None) -> None:
+    def fly_to(self, lat: float, lon: float, zoom: float | None = None, screen_dy: float = 0.0) -> None:
+        """Плавно повернуть (и приблизить) глобус к точке.
+
+        screen_dy — на сколько пикселей выше центра области глобуса окажется точка:
+        центр вида смещается к югу на угол, под которым точка поверхности видна
+        на такой высоте. Точка лежит на центральном меридиане вида, поэтому сдвиг точный.
+        """
         z = self.target_zoom if zoom is None else max(MIN_ZOOM, min(MAX_ZOOM, zoom))
+        if screen_dy:
+            scale = self.renderer.scale_for(self.rect) / self.view.zoom * z
+            radius = float(self.renderer.surface_radius(lat, lon))
+            k = max(-0.9, min(0.9, screen_dy / (scale * radius)))
+            lat -= math.degrees(math.asin(k))
         self._flight = (lat, lon, z)
 
     def set_glow(self, name: str, faces: np.ndarray | None, color=(255, 230, 60),

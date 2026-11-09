@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from .geo import angular_distance, direction_hint
 from .model import SURFACE_WATER
 from .quiz import Question
-from .regions import Region, RegionSet
+from .regions import Fact, Region, RegionSet
 from .renderer import GlobeRenderer
 
 HIT_TOLERANCE_PX = 22
@@ -106,12 +106,49 @@ def miss_message(regions: RegionSet, question: Question, tap: Tap, riddle: bool)
     return f"{first} {second}"
 
 
-def correct_message(region: Region, question: Question, rng: random.Random | None = None) -> tuple[str, str]:
-    """Заголовок и пояснение для правильного ответа."""
+class FactPicker:
+    """Выбирает факт об объекте без повторов, пока не показаны все его факты.
+
+    У каждого объекта — перемешанный «мешок» номеров фактов. Когда он пустеет,
+    набирается новый, и первым в нём не идёт только что показанный факт.
+    Один выборщик живёт весь запуск игры.
+    """
+
+    def __init__(self, rng: random.Random | None = None):
+        self.rng = rng or random.Random()
+        self._bags: dict[str, list[int]] = {}
+        self._last: dict[str, int] = {}
+
+    def pick(self, region: Region) -> Fact:
+        if not region.facts:
+            return Fact("", "")
+        bag = self._bags.get(region.id)
+        if not bag:
+            bag = list(range(len(region.facts)))
+            self.rng.shuffle(bag)
+            if len(bag) > 1 and bag[-1] == self._last.get(region.id):
+                bag[0], bag[-1] = bag[-1], bag[0]  # берём с конца — не повторяем последний
+            self._bags[region.id] = bag
+        i = bag.pop()
+        self._last[region.id] = i
+        return region.facts[i]
+
+
+def _fact_for(region: Region, question: Question, picker: FactPicker | None) -> Fact:
+    """У вопроса на рассуждение — его пояснение, иначе случайный факт об объекте."""
+    if question.fact:
+        return Fact("", question.fact)
+    return (picker or FactPicker()).pick(region)
+
+
+def correct_message(region: Region, question: Question, picker: FactPicker | None = None,
+                    rng: random.Random | None = None) -> tuple[str, Fact]:
+    """Похвала с названием и факт для правильного ответа."""
     rng = rng or random
     title = f"{rng.choice(PRAISE)} Это {region.name}."
-    return title, question.fact or region.fact
+    return title, _fact_for(region, question, picker)
 
 
-def reveal_message(region: Region, question: Question) -> tuple[str, str]:
-    return f"Вот {region.name}.", question.fact or region.fact
+def reveal_message(region: Region, question: Question, picker: FactPicker | None = None) -> tuple[str, Fact]:
+    """Название показанного объекта и факт о нём."""
+    return f"Вот {region.name}.", _fact_for(region, question, picker)

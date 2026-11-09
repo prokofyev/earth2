@@ -9,7 +9,7 @@ from ..app import Scene
 from ..fx import StarFlight
 from ..globe_widget import ZOOM_STEP, Marker
 from ..quiz import LevelRun, Result
-from ..regions import Region
+from ..regions import Fact, Region
 from ..ui import (ACCENT, BAD, GOOD, PANEL, TEXT, TEXT_DIM, Button, back_button, draw_back_button, draw_panel,
                   draw_star, draw_text, place_back_button, text_height, ui_scale)
 
@@ -43,7 +43,8 @@ class LevelScene(Scene):
         self.run = LevelRun(self.level)
         self.state = ASK
         self.title = ""
-        self.body = ""
+        self.body = ""  # пояснение при промахе
+        self.fact: Fact | None = None  # факт о подсвеченном объекте
         self.flights: list[StarFlight] = []
         self.shown_stars = 0
         self.ui_press = False
@@ -128,24 +129,26 @@ class LevelScene(Scene):
         if found is not None:
             out = self.run.submit(True)
             self.state = CORRECT
-            self.title, self.body = correct_message(found, q)
+            self.title, self.fact = correct_message(found, q, app.facts)
             app.globe.clear_effects()  # убираем подсветку-подсказку
             self._show(found, "found", FOUND_COLOR, fly=False)
             start = (pos[0] + app.globe.rect.left, pos[1] + app.globe.rect.top)
             for i in range(out.stars):
                 self.flights.append(StarFlight(start, self.counter_pos, delay=0.15 * i, size=26 * self.s))
             self.btn_next.visible = True
+            self._keep_above_panel(tap.latlon, start[1])
             return
         out = self.run.submit(False)
         if out.result is Result.FAILED:
             self.state = REVEAL
             target, _ = nearest_target(app.regions, q, tap.latlon)
-            self.title, self.body = reveal_message(target, q)
+            self.title, self.fact = reveal_message(target, q, app.facts)
             app.globe.clear_effects()
             # Показ ответа приближает объект; после «Дальше» вернём масштаб ребёнка.
             self.zoom_before_reveal = app.globe.target_zoom
-            self._show(target, "reveal", REVEAL_COLOR, fly=True)
             self.btn_next.visible = True
+            panel, *_ = self._message_layout(pygame.display.get_surface().get_size())
+            self._show(target, "reveal", REVEAL_COLOR, fly=True, screen_dy=self._free_dy(panel))
             return
         self.state = MISS
         self.title = miss_message(app.regions, q, tap, riddle=self.level.riddles)
@@ -155,7 +158,8 @@ class LevelScene(Scene):
             for rid in q.accept:
                 self._show(app.regions[rid], "hint", HINT_COLOR, fly=False, soft=True, key_suffix=rid)
 
-    def _show(self, region: Region, key: str, color, fly: bool, soft=False, key_suffix="") -> None:
+    def _show(self, region: Region, key: str, color, fly: bool, soft=False, key_suffix="",
+              screen_dy: float = 0.0) -> None:
         g = self.app.globe
         name = f"{key}:{key_suffix}" if key_suffix else key
         if region.kind in ("point", "peak", "line"):
@@ -168,7 +172,7 @@ class LevelScene(Scene):
             lat, lon = region.center
             if region.kind == "line":
                 lon = g.view.center_lon
-            g.fly_to(lat, lon, zoom_for(region))
+            g.fly_to(lat, lon, zoom_for(region), screen_dy=screen_dy)
 
     def _next(self) -> None:
         if self.state not in (CORRECT, REVEAL) or self.app.globe.busy:
@@ -185,6 +189,7 @@ class LevelScene(Scene):
         self.run.next_question()
         self.state = ASK
         self.title = self.body = ""
+        self.fact = None
         self.btn_next.visible = False
         self.app.globe.clear_effects()
         if self.zoom_before_reveal is not None:
@@ -230,29 +235,54 @@ class LevelScene(Scene):
         for f in self.flights:
             f.draw(surf)
 
-    def _draw_message(self, surf) -> None:
+    def _message_layout(self, size) -> tuple[pygame.Rect, list, int, int]:
+        """Панель сообщения внизу: прямоугольник, блоки текста под заголовком, поля и ширина строки."""
         s = self.s
-        w, h = surf.get_size()
+        w, h = size
         width = min(int(900 * s), w - int(220 * s))
         pad = int(22 * s)
-        title_size, body_size = int(36 * s), int(28 * s)
         inner = width - 2 * pad
-        th = text_height(self.title, title_size, inner)
-        bh = text_height(self.body, body_size, inner) if self.body else 0
+        # Под заголовком — либо факт (заголовок и текст), либо пояснение промаха.
+        blocks = []
+        if self.fact is not None:
+            if self.fact.title:
+                blocks.append((self.fact.title, int(30 * s), ACCENT))
+            if self.fact.text:
+                blocks.append((self.fact.text, int(26 * s), TEXT))
+        elif self.body:
+            blocks.append((self.body, int(28 * s), TEXT_DIM if self.state == MISS else TEXT))
+        gap = int(12 * s)
+        th = text_height(cap(self.title), int(36 * s), inner)
+        bh = sum(gap + text_height(t, size, inner) for t, size, _ in blocks)
         btn_h = self.btn_next.rect.height + pad if self.btn_next.visible else 0
-        height = pad * 2 + th + (int(12 * s) + bh if bh else 0) + btn_h
-        rect = pygame.Rect(0, 0, width, height)
+        rect = pygame.Rect(0, 0, width, pad * 2 + th + bh + btn_h)
         rect.midbottom = (w // 2, h - int(24 * s))
+        return rect, blocks, pad, inner
+
+    def _free_dy(self, panel: pygame.Rect) -> float:
+        """На сколько пикселей выше центра глобуса середина свободной части над панелью."""
+        globe = self.app.globe.rect
+        free_mid = (self.top_h + panel.top) / 2
+        return max(0.0, globe.centery - free_mid)
+
+    def _keep_above_panel(self, latlon, screen_y: float) -> None:
+        """Найденный объект под панелью или у её края — повернуть его в свободную часть."""
+        panel, *_ = self._message_layout(pygame.display.get_surface().get_size())
+        if screen_y > panel.top - 20 * self.s:
+            self.app.globe.fly_to(*latlon, screen_dy=self._free_dy(panel))
+
+    def _draw_message(self, surf) -> None:
+        s = self.s
+        rect, blocks, pad, inner = self._message_layout(surf.get_size())
+        gap = int(12 * s)
         edge = {MISS: BAD, CORRECT: GOOD, REVEAL: (255, 170, 80)}.get(self.state, ACCENT)
         draw_panel(surf, rect, color=PANEL, edge=edge, alpha=235)
         self.panel_rect = rect
-        y = rect.top + pad
-        r = draw_text(surf, cap(self.title), title_size, edge if self.state != MISS else TEXT,
-                      (rect.centerx, y), anchor="midtop", width=inner)
-        y = r.bottom + int(12 * s)
-        if self.body:
-            r = draw_text(surf, self.body, body_size, TEXT_DIM if self.state == MISS else TEXT,
-                          (rect.centerx, y), anchor="midtop", width=inner)
+        r = draw_text(surf, cap(self.title), int(36 * s), edge if self.state != MISS else TEXT,
+                      (rect.centerx, rect.top + pad), anchor="midtop", width=inner)
+        y = r.bottom
+        for text, size, color in blocks:
+            r = draw_text(surf, text, size, color, (rect.centerx, y + gap), anchor="midtop", width=inner)
             y = r.bottom
         if self.btn_next.visible:
             self.btn_next.rect.midbottom = (rect.centerx, rect.bottom - pad)

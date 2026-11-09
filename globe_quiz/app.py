@@ -8,6 +8,7 @@ import sys
 import pygame
 
 from . import DATA_DIR
+from .answers import FactPicker
 from .globe_widget import GlobeWidget
 from .model import load_earth
 from .progress import Players, Progress, load_players, save_players
@@ -65,6 +66,7 @@ class App:
 
         self.model = load_earth()
         self.regions = RegionSet.load().assign(self.model)
+        self.facts = FactPicker()  # факты об объектах без повторов за запуск
         self.levels = load_levels()
         self.players: Players = load_players()
         self.credits = model_credits()

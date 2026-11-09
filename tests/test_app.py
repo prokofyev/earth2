@@ -99,7 +99,7 @@ def test_all_game_texts_have_glyphs():
     for level in load_levels():
         texts.append(level.title)
         texts += [q.text + (q.fact or "") for q in level.questions]
-    texts += [r.name + r.fact for r in RegionSet.load().regions]
+    texts += [r.name + "".join(f.title + f.text for f in r.facts) for r in RegionSet.load().regions]
     texts += list(model_credits().values())
     bad = set()
     for t in texts:
@@ -726,3 +726,140 @@ def test_switch_player_renames_menu_button(app):
     assert isinstance(app.scene, MenuScene)
     frame(app)
     assert app.scene.btn_player.text == "Маша"
+
+
+def _look_at(app, region_id):
+    g = app.globe
+    g.view.center_lat, g.view.center_lon = app.regions[region_id].center
+    frame(app)
+
+
+def test_correct_answer_shows_a_fact(app, monkeypatch):
+    scene = _islands_scene(app, "sakhalin")
+    _look_at(app, "sakhalin")
+    click(app, app.globe.rect.center)
+    assert scene.state == CORRECT
+    facts = app.regions["sakhalin"].facts
+    assert scene.fact in facts
+    texts = _drawn_texts(app, monkeypatch, "globe_quiz.scenes.level")
+    assert scene.fact.title in texts and scene.fact.text in texts
+
+
+def test_miss_shows_no_fact(app, monkeypatch):
+    scene = _islands_scene(app, "sakhalin")
+    click(app, app.globe.rect.center)  # в центр вида — Африка
+    assert scene.state == MISS and scene.fact is None
+    texts = _drawn_texts(app, monkeypatch, "globe_quiz.scenes.level")
+    all_facts = {f.title for r in app.regions.regions for f in r.facts} | \
+                {f.text for r in app.regions.regions for f in r.facts}
+    assert not all_facts & set(texts)
+
+
+def test_reveal_shows_a_fact(app, monkeypatch):
+    scene = _islands_scene(app)
+    _miss_three_times(app, scene)
+    assert scene.fact in app.regions["sicily"].facts
+    texts = _drawn_texts(app, monkeypatch, "globe_quiz.scenes.level")
+    assert "Вот Сицилия." in texts and scene.fact.text in texts
+
+
+# --- Объект над панелью с фактом -------------------------------------------------
+
+def _level_scene(app, level_key, rid):
+    level = next(lv for lv in app.levels if lv.key == level_key)
+    app.switch(LevelScene(app, level))
+    scene = app.scene
+    scene.run.questions[0] = next(q for q in level.questions if q.accept == (rid,))
+    frame(app)
+    return scene
+
+
+def _visible_point(app, rid):
+    """Экранная точка любой видимой грани объекта при текущем виде."""
+    g = app.globe
+    frame(app)
+    fr = g.renderer.frame
+    region = app.regions[rid]
+    for k in np.nonzero(region.faces[fr.order])[0][::-1]:
+        c = fr.pts[k].mean(axis=0)
+        if g.renderer.pick_face(c) == fr.order[k]:
+            return int(c[0] + g.rect.left), int(c[1] + g.rect.top)
+    raise AssertionError(rid)
+
+
+def _screen_y(app, latlon):
+    g = app.globe
+    (_, y), visible = g.renderer.project_latlon(*latlon)
+    assert visible
+    return y + g.rect.top
+
+
+def _wait_flight(app):
+    for _ in range(300):
+        frame(app, dt=0.05)
+        if not app.globe.busy:
+            break
+    assert not app.globe.busy
+    frame(app)
+
+
+def test_fly_to_with_screen_offset(app):
+    _islands_scene(app)
+    g = app.globe
+    lat, lon = app.regions["sicily"].center
+    g.fly_to(lat, lon, 1.0, screen_dy=100)
+    _wait_flight(app)
+    assert _screen_y(app, (lat, lon)) == pytest.approx(g.rect.centery - 100, abs=6)
+
+
+@pytest.fixture
+def small_window(app):
+    """Окно 800 × 600, как в сценариях; потом прежний размер."""
+    old = pygame.display.get_surface().get_size()
+    pygame.display.set_mode((800, 600))
+    app._size = None
+    yield
+    pygame.display.set_mode(old)
+    app._size = None
+
+
+def test_found_object_moves_above_panel(app, small_window):
+    scene = _islands_scene(app, "madagascar")
+    g = app.globe
+    lat, lon = app.regions["madagascar"].center
+    g.view.center_lat, g.view.center_lon = lat + 40, lon  # Мадагаскар у нижнего края глобуса
+    pos = _visible_point(app, "madagascar")
+    tapped = g.renderer.screen_to_latlon(g.to_local(pos))
+    click(app, pos)
+    assert scene.state == CORRECT
+    assert pos[1] > scene._message_layout(pygame.display.get_surface().get_size())[0].top
+    _wait_flight(app)
+    panel = scene.panel_rect
+    y = _screen_y(app, tapped)
+    assert scene.top_h < y < panel.top  # над панелью
+    assert abs(y - (scene.top_h + panel.top) / 2) < 40  # около середины свободной части
+
+
+def test_reveal_shows_object_above_panel(app, small_window):
+    scene = _islands_scene(app)
+    _miss_three_times(app, scene)
+    frame(app)
+    panel = scene.panel_rect
+    y = _screen_y(app, app.regions["sicily"].center)
+    assert scene.top_h < y < panel.top
+    assert abs(y - (scene.top_h + panel.top) / 2) < 10
+
+
+def test_visible_object_stays_put(app):
+    scene = _level_scene(app, "continents", "africa")
+    g = app.globe
+    lat, lon = app.regions["africa"].center
+    g.view.center_lat, g.view.center_lon = lat - 25, lon  # Африка в верхней части глобуса
+    frame(app)
+    pos = (g.rect.centerx, g.rect.centery - 120)
+    click(app, pos)
+    assert scene.state == CORRECT
+    view = (g.view.center_lat, g.view.center_lon)
+    assert not g.busy
+    _settle(app, 20)
+    assert (g.view.center_lat, g.view.center_lon) == pytest.approx(view)

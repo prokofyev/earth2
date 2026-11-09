@@ -1,10 +1,13 @@
 """Проверка ответов на настоящем глобусе, включая прогон всех вопросов всех уровней."""
 
+import random
+
 import numpy as np
 import pygame
 import pytest
 
-from globe_quiz.answers import check_answer, correct_message, inspect_tap, miss_message, reveal_message
+from globe_quiz.answers import (FactPicker, check_answer, correct_message, inspect_tap, miss_message,
+                                reveal_message)
 from globe_quiz.quiz import Question, load_levels
 from globe_quiz.regions import RegionSet
 from globe_quiz.renderer import GlobeRenderer, View
@@ -126,9 +129,32 @@ def test_riddle_hint_does_not_reveal_answer(earth, regions):
 def test_correct_and_reveal_messages(regions):
     q = Question("Найди Каспийское море", ("caspian_sea",))
     title, fact = correct_message(regions["caspian_sea"], q)
-    assert "Каспийское море" in title and "самое большое озеро" in fact
-    title, _ = reveal_message(regions["pacific_ocean"], q)
-    assert title == "Вот Тихий океан."
+    assert "Каспийское море" in title and fact in regions["caspian_sea"].facts
+    title, fact = reveal_message(regions["pacific_ocean"], q)
+    assert title == "Вот Тихий океан." and fact in regions["pacific_ocean"].facts
+
+
+def test_five_picks_give_five_different_facts(regions):
+    picker = FactPicker(random.Random(1))
+    sakhalin = regions["sakhalin"]
+    picked = [picker.pick(sakhalin) for _ in range(5)]
+    assert len(set(picked)) == 5 and set(picked) == set(sakhalin.facts)
+
+
+def test_no_repeat_across_bags(regions):
+    for seed in range(40):
+        picker = FactPicker(random.Random(seed))
+        picked = [picker.pick(regions["cuba"]) for _ in range(30)]
+        assert all(a != b for a, b in zip(picked, picked[1:])), seed
+
+
+def test_reasoning_question_keeps_its_explanation(regions):
+    q = Question("Найди материк, через который проходит экватор", ("africa", "south_america"),
+                 fact="Экватор пересекает два материка: Африку и Южную Америку.")
+    _, fact = correct_message(regions["africa"], q, FactPicker())
+    assert fact.title == "" and fact.text == q.fact
+    _, fact = reveal_message(regions["africa"], q, FactPicker())
+    assert fact.text == q.fact
 
 
 @pytest.mark.parametrize("lat,lon", [(80, 30), (80, -100)])  # в 10° от полюса, как в сценарии

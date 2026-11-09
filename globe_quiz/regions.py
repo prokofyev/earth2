@@ -4,6 +4,8 @@
 в градусах [широта, долгота] или прямоугольник по широте/долготе, плюс типы
 поверхности (вода, суша, лёд), которые она размечает.
 
+Интересные факты об объектах лежат отдельно, в facts.json: по пять у каждого.
+
 Базовые регионы (материки, озёра и океаны) делят грани между собой: грань получает
 первый подходящий базовый регион в порядке файла. Остальные регионы
 (острова, моря, полушария…) накладываются поверх независимо.
@@ -67,12 +69,23 @@ class Part:
         return inside
 
 
+FACTS_PER_REGION = 5
+
+
+@dataclass(frozen=True)
+class Fact:
+    """Интересный факт: короткий заголовок и пояснение в 2–3 предложения."""
+
+    title: str
+    text: str
+
+
 @dataclass
 class Region:
     id: str
     name: str
     kind: str
-    fact: str = ""
+    facts: tuple[Fact, ...] = ()
     parts: list[Part] = field(default_factory=list)
     at: tuple[float, float] | None = None  # для точек
     lat: float | None = None  # для линий-параллелей
@@ -118,7 +131,7 @@ def parse_region(raw: dict) -> Region:
     kind = raw["kind"]
     if kind not in FACE_KINDS | TARGET_ONLY_KINDS:
         raise ValueError(f"неизвестный вид региона {kind!r} у {raw['id']}")
-    region = Region(id=raw["id"], name=raw["name"], kind=kind, fact=raw.get("fact", ""))
+    region = Region(id=raw["id"], name=raw["name"], kind=kind)
     if kind in POINT_KINDS:
         region.at = tuple(raw["at"])
         region.center = region.at
@@ -147,9 +160,25 @@ class RegionSet:
         self.membership: np.ndarray | None = None  # (F, R) bool
 
     @classmethod
-    def load(cls, path: Path = DATA_DIR / "regions.json") -> "RegionSet":
+    def load(cls, path: Path = DATA_DIR / "regions.json",
+             facts_path: Path | None = DATA_DIR / "facts.json") -> "RegionSet":
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-        return cls([parse_region(r) for r in data["regions"]])
+        regions = cls([parse_region(r) for r in data["regions"]])
+        if facts_path is not None:
+            regions.attach_facts(json.loads(Path(facts_path).read_text(encoding="utf-8")))
+        return regions
+
+    def attach_facts(self, data: dict) -> None:
+        """Раздаёт объектам факты {id: [{title, text}, …]}: ровно пять у каждого, без чужих id."""
+        extra = sorted(set(data) - set(self.by_id))
+        if extra:
+            raise ValueError(f"факты для неизвестных объектов: {', '.join(extra)}")
+        for region in self.regions:
+            raw = data.get(region.id, [])
+            if len(raw) != FACTS_PER_REGION:
+                raise ValueError(f"у объекта «{region.name}» ({region.id}) {len(raw)} фактов "
+                                 f"вместо {FACTS_PER_REGION}")
+            region.facts = tuple(Fact(str(f["title"]), str(f["text"])) for f in raw)
 
     def __getitem__(self, region_id: str) -> Region:
         return self.by_id[region_id]

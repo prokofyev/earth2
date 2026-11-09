@@ -108,3 +108,28 @@ def test_peak_is_a_target_only_point():
     assert kili.at == (-5.5, 34.0) and kili.faces is None
     assert regions.nearest_target_point(kili, (10, 10)) == (-5.5, 34.0)
     assert regions.most_specific(0) is None  # вершина не называется при промахе
+
+
+def _two_regions():
+    return RegionSet([parse_region({"id": "x", "name": "Икс", "kind": "island"}),
+                      parse_region({"id": "y", "name": "Игрек", "kind": "island"})])
+
+
+def _facts(n):
+    return [{"title": f"Факт {i}", "text": f"Текст {i}."} for i in range(n)]
+
+
+def test_facts_attached_five_each():
+    regions = _two_regions()
+    regions.attach_facts({"x": _facts(5), "y": _facts(5)})
+    assert len(regions["x"].facts) == 5 and regions["y"].facts[2].title == "Факт 2"
+
+
+def test_facts_wrong_count_names_region():
+    with pytest.raises(ValueError, match="Игрек.*4 фактов"):
+        _two_regions().attach_facts({"x": _facts(5), "y": _facts(4)})
+
+
+def test_facts_unknown_id_rejected():
+    with pytest.raises(ValueError, match="неизвестных объектов: z"):
+        _two_regions().attach_facts({"x": _facts(5), "y": _facts(5), "z": _facts(5)})

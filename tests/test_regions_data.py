@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pytest
 
@@ -251,3 +253,30 @@ def test_new_mountains_are_raised(earth, regions, rid):
             any_mountains |= r.faces
     around = (d < 15) & (earth.surface == 1) & ~any_mountains
     assert np.median(earth.height[faces]) > np.median(earth.height[around])
+
+
+# --- Интересные факты --------------------------------------------------------
+
+SENTENCE_END = re.compile(r"[.!?…](?=\s+[«(\"]?[А-ЯЁA-Z0-9]|$)")
+
+
+def test_every_region_has_five_good_facts():
+    problems = []
+    for r in RegionSet.load().regions:
+        if len(r.facts) != 5:
+            problems.append(f"{r.id}: {len(r.facts)} фактов")
+            continue
+        titles = [f.title for f in r.facts]
+        if len(set(titles)) != 5 or len({f.text for f in r.facts}) != 5:
+            problems.append(f"{r.id}: повторы")
+        for f in r.facts:
+            if not 1 <= len(f.title) <= 50 or f.title.endswith(".") or f.title != f.title.strip():
+                problems.append(f"{r.id}: заголовок {f.title!r}")
+            if len(f.text) > 260:
+                problems.append(f"{r.id}: текст длиннее 260 ({len(f.text)}): {f.title}")
+            n = len(SENTENCE_END.findall(f.text.strip()))
+            if not 2 <= n <= 3:
+                problems.append(f"{r.id}: {n} предложений: {f.title}")
+            if "  " in f.text or f.text != f.text.strip():
+                problems.append(f"{r.id}: лишние пробелы: {f.title}")
+    assert problems == []
