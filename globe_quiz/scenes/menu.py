@@ -5,7 +5,7 @@ from __future__ import annotations
 import pygame
 
 from ..app import Scene
-from ..quiz import MAX_QUESTIONS
+from ..quiz import MAX_QUESTIONS, previous_level
 from ..ui import (ACCENT, BAD, PANEL, PANEL_EDGE, STAR_EMPTY, TEXT, TEXT_DIM, Button, draw_lock,
                   draw_panel, draw_star, draw_text, ui_scale)
 
@@ -37,7 +37,7 @@ class MenuScene(Scene):
         w, h = size
         self.s = s = ui_scale(pygame.display.get_surface())
         levels = self.app.levels
-        cols = 4 if w >= 1000 else 2
+        cols = 4 if w >= 1000 else 3  # 11 карточек: 4+4+3 или 3+3+3+2
         rows = (len(levels) + cols - 1) // cols
         gap = int(24 * s)
         top = int(150 * s)
@@ -80,8 +80,8 @@ class MenuScene(Scene):
             self._pressed = None
 
     def _open(self, level) -> None:
-        if not self.app.progress.is_unlocked(level.id):
-            prev = self.app.levels[level.id - 2]
+        if not self.app.progress.is_unlocked(level):
+            prev = previous_level(self.app.levels, level)
             self.message = f"Чтобы открыть этот уровень, пройди уровень «{prev.title}»"
             self.message_t = 3.0
             return
@@ -108,7 +108,7 @@ class MenuScene(Scene):
         progress = self.app.progress
         mouse = pygame.mouse.get_pos()
         for rect, level in self.cards:
-            unlocked = progress.is_unlocked(level.id)
+            unlocked = progress.is_unlocked(level)
             hover = unlocked and rect.collidepoint(mouse)
             color = (40, 56, 130) if hover else PANEL
             edge = ACCENT if hover else PANEL_EDGE
@@ -120,7 +120,7 @@ class MenuScene(Scene):
             title_rect = draw_text(surf, level.title, int(36 * s), title_col,
                                    (rect.centerx, rect.top + int(rect.height * 0.42)), width=rect.width - int(30 * s))
             if unlocked:
-                best = progress.best_for(level.id)
+                best = progress.best_for(level.key)
                 max_stars = 3 * min(MAX_QUESTIONS, len(level.questions))
                 filled = 3 if best >= max_stars else (2 if best >= max_stars * 2 / 3 else (1 if best > 0 else 0))
                 y = rect.bottom - int(48 * s)

@@ -176,3 +176,78 @@ def test_peaks_on_raised_land_near_real_place(earth, regions, rid):
     d = np.array([angular_distance(peak.at, tuple(x)) for x in earth.latlon])
     around = (d > 3) & (d < 7) & (earth.surface == 1) & ~any_mountains
     assert any_mountains[f] or earth.height[f] > np.median(earth.height[around])
+
+
+# --- Новые объекты: острова, полуострова, моря, заливы, горы ------------------------
+
+NEW_OBJECTS = [  # (точка, регион, материк или океан)
+    ((50.1, 144.8), "sakhalin", "eurasia"),
+    ((21.0, -81.0), "cuba", "north_america"),
+    ((37.2, 13.7), "sicily", "eurasia"),
+    ((39.8, 9.3), "sardinia", "eurasia"),
+    ((-2.8, 121.6), "sulawesi", "eurasia"),
+    ((10.4, 123.4), "philippines", "eurasia"),
+    ((23.5, 121.1), "taiwan", "eurasia"),
+    ((18.9, 109.6), "hainan", "eurasia"),
+    ((73.5, 55.2), "novaya_zemlya", "eurasia"),
+    ((48.2, -55.6), "newfoundland", "north_america"),
+    ((17.0, 102.0), "indochina", "eurasia"),
+    ((4.6, 102.0), "malacca", "eurasia"),
+    ((41.3, 22.7), "balkan_peninsula", "eurasia"),
+    ((39.2, 33.1), "asia_minor", "eurasia"),
+    ((8.4, 45.4), "somali_peninsula", "africa"),
+    ((18.7, -89.0), "yucatan", "north_america"),
+    ((27.4, -113.8), "baja_california", "north_america"),
+    ((56.2, -67.7), "labrador", "north_america"),
+    ((36.6, 127.0), "korean_peninsula", "eurasia"),
+    ((65.1, 179.8), "chukotka", "eurasia"),
+    ((66.0, -174.0), "chukotka", "eurasia"),  # восток Чукотки за 180° — всё ещё Евразия
+    ((67.5, 35.8), "kola_peninsula", "eurasia"),
+    ((56.2, 8.6), "jutland", "eurasia"),
+    ((55.6, 3.3), "north_sea", "atlantic_ocean"),
+    ((71.0, 39.6), "barents_sea", "arctic_ocean"),
+    ((66.1, 40.5), "white_sea", "arctic_ocean"),
+    ((51.6, 149.5), "sea_of_okhotsk", "pacific_ocean"),
+    ((41.5, 137.5), "sea_of_japan", "pacific_ocean"),
+    ((59.9, -172.2), "bering_sea", "pacific_ocean"),
+    ((10.6, 64.3), "arabian_sea", "indian_ocean"),
+    ((13.0, 111.6), "south_china_sea", "pacific_ocean"),
+    ((-36.5, 157.6), "tasman_sea", "pacific_ocean"),
+    ((37.8, 123.3), "yellow_sea", "pacific_ocean"),
+    ((41.8, 17.6), "adriatic_sea", "atlantic_ocean"),
+    ((11.5, 89.2), "bay_of_bengal", "indian_ocean"),
+    ((0.3, 1.5), "gulf_of_guinea", "atlantic_ocean"),
+    ((46.9, -7.0), "bay_of_biscay", "atlantic_ocean"),
+    ((43.0, -0.6), "pyrenees", "eurasia"),
+    ((38.0, 73.3), "pamir", "eurasia"),
+    ((47.9, 87.8), "altai", "eurasia"),
+    ((-14.5, -47.0), "brazilian_highlands", "south_america"),
+]
+
+
+@pytest.mark.parametrize("point,region_id,base", NEW_OBJECTS)
+def test_new_object_control_point(earth, regions, point, region_id, base):
+    face = face_at(earth, *point)
+    names = [r.id for r in regions.regions_of_face(face)]
+    assert region_id in names and base in names, f"{point}: {names}"
+
+
+def test_alaska_stops_at_bering_strait(earth, regions):
+    names = [r.id for r in regions.regions_of_face(face_at(earth, 66.0, -174.0))]
+    assert "alaska" not in names and "north_america" not in names
+
+
+@pytest.mark.parametrize("rid", ["pyrenees", "pamir", "altai", "brazilian_highlands"])
+def test_new_mountains_are_raised(earth, regions, rid):
+    from globe_quiz.geo import angular_distance
+
+    faces = regions[rid].faces
+    assert faces.sum() >= 5
+    lat, lon = regions[rid].center
+    d = np.array([angular_distance((lat, lon), tuple(x)) for x in earth.latlon])
+    any_mountains = np.zeros(len(earth), bool)
+    for r in regions.regions:
+        if r.kind == "mountains":
+            any_mountains |= r.faces
+    around = (d < 15) & (earth.surface == 1) & ~any_mountains
+    assert np.median(earth.height[faces]) > np.median(earth.height[around])

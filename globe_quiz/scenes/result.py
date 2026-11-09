@@ -6,7 +6,7 @@ import pygame
 
 from ..app import Scene
 from ..fx import Fireworks
-from ..quiz import PASS_RATIO
+from ..quiz import PASS_RATIO, next_level
 from ..ui import ACCENT, GOOD, TEXT, TEXT_DIM, Button, draw_star, draw_text, ui_scale
 
 
@@ -17,18 +17,16 @@ class ResultScene(Scene):
         self.stars = run.total_stars
         self.max_stars = run.max_stars
         self.passed = run.passed
-        level_count = len(app.levels)
-        was_unlocked = app.progress.unlocked
-        app.progress.record(level.id, self.stars, self.passed, level_count)
+        following = next_level(app.levels, level)
+        was_open = len(app.progress.opened)
+        app.progress.record(level.key, self.stars, self.passed, following.key if following else None)
         app.save_progress()
-        self.unlocked_new = app.progress.unlocked > was_unlocked
+        self.unlocked_new = len(app.progress.opened) > was_open
 
     @property
     def next_level(self):
         """Следующий уровень, если этот пройден и он не последний."""
-        if self.passed and self.level.id < len(self.app.levels):
-            return self.app.levels[self.level.id]
-        return None
+        return next_level(self.app.levels, self.level) if self.passed else None
 
     def enter(self) -> None:
         self.btn_main = Button("Следующий уровень" if self.next_level else "Ещё раз")

@@ -158,7 +158,7 @@ def test_full_flow_level_one(app, tmp_path):
     for _ in range(120):
         frame(app)
     saved = current_progress()
-    assert saved.best_for(1) == 17 and saved.is_unlocked(2)
+    assert saved.best_for("continents") == 17 and saved.is_unlocked(app.levels[1])
 
 
 def test_escape_from_level_keeps_progress(app):
@@ -178,13 +178,13 @@ def test_resize_relayouts(app):
     assert app.scene.btn_minus.rect.bottom <= 480
 
 
-def test_all_eight_levels_in_a_row_from_fresh_start(app):
+def test_all_levels_in_a_row_from_fresh_start(app):
     """С чистого прогресса проходим все уровни подряд; каждый открывает следующий."""
     for level in app.levels:
         app.switch(MenuScene(app))
         frame(app)
         rect, card_level = app.scene.cards[level.id - 1]
-        assert card_level is level and app.progress.is_unlocked(level.id)
+        assert card_level is level and app.progress.is_unlocked(level)
         click(app, rect.center)
         scene = app.scene
         assert isinstance(scene, LevelScene) and scene.level is level
@@ -199,8 +199,8 @@ def test_all_eight_levels_in_a_row_from_fresh_start(app):
                 break
         assert isinstance(app.scene, ResultScene) and app.scene.passed
     saved = current_progress()
-    assert saved.unlocked == 8
-    assert all(saved.best_for(lv.id) == 3 * min(8, len(lv.questions)) for lv in app.levels)
+    assert all(saved.is_unlocked(lv) for lv in app.levels)
+    assert all(saved.best_for(lv.key) == 3 * min(8, len(lv.questions)) for lv in app.levels)
 
 
 def _finish_level(app, level, perfect=True):
@@ -239,12 +239,12 @@ def test_result_failed_offers_retry(app):
 
 
 def test_result_last_level_offers_retry(app):
-    result = _finish_level(app, app.levels[7])
+    result = _finish_level(app, app.levels[-1])
     assert result.passed and result.btn_main.text == "Ещё раз"
 
 
 def test_after_peaks_next_is_riddles(app):
-    result = _finish_level(app, app.levels[6])
+    result = _finish_level(app, app.levels[-2])
     assert result.passed and result.btn_main.text == "Следующий уровень"
     click(app, result.btn_main.rect.center)
     assert isinstance(app.scene, LevelScene) and app.scene.level.title == "Загадки"
@@ -276,7 +276,7 @@ def test_old_progress_file_starts_clean(tmp_path, monkeypatch):
     type_text(app, "Саша")
     press(app, pygame.K_RETURN)
     assert isinstance(app.scene, MenuScene)
-    assert app.progress.unlocked == 1 and app.progress.best == {}
+    assert app.progress.opened == set() and app.progress.best == {}
     pygame.key.stop_text_input()
 
 
@@ -302,8 +302,8 @@ def test_first_run_asks_for_name(fresh_app):
 def test_switch_player_and_separate_progress(app):
     from globe_quiz.scenes.players import PlayersScene
 
-    app.progress.record(1, 18, True, 8)
-    app.progress.record(2, 12, True, 8)
+    app.progress.record("continents", 18, True, "oceans")
+    app.progress.record("oceans", 12, True, "poles_equator")
     app.save_progress()
     app.switch(MenuScene(app))
     frame(app)
@@ -321,7 +321,7 @@ def test_switch_player_and_separate_progress(app):
     type_text(app, "Петя")
     press(app, pygame.K_RETURN)
     assert isinstance(app.scene, MenuScene) and app.players.current == "Петя"
-    assert app.progress.unlocked == 1 and app.progress.best == {}
+    assert app.progress.opened == set() and app.progress.best == {}
     # Возвращаемся к первому игроку — его прогресс на месте.
     frame(app)
     click(app, app.scene.btn_player.rect.center)
@@ -329,7 +329,7 @@ def test_switch_player_and_separate_progress(app):
     btn = next(b for b in app.scene.player_buttons if b.text == "Тест")
     click(app, btn.rect.center)
     assert isinstance(app.scene, MenuScene)
-    assert app.progress.unlocked == 3 and app.progress.best_for(1) == 18
+    assert app.progress.opened == {"oceans", "poles_equator"} and app.progress.best_for("continents") == 18
     assert progress_mod.load_players().current == "Тест"
 
 
@@ -376,15 +376,23 @@ def test_splash_notes_model_changes(app):
 
 
 @pytest.mark.parametrize("size", [(1024, 768), (1792, 982), (800, 600)])
-def test_menu_fits_eight_cards(app, size):
+def test_menu_fits_all_cards(app, size):
     app.switch(MenuScene(app))
     app.scene.layout(size)
     win = pygame.Rect((0, 0), size)
     rects = [rect for rect, _ in app.scene.cards]
-    assert len(rects) == 8
+    assert len(rects) == 11
     assert all(win.contains(r) for r in rects)  # ни одна не обрезана
     assert not any(a.colliderect(b) for i, a in enumerate(rects) for b in rects[i + 1:])
     assert [lv.title for _, lv in app.scene.cards][-2:] == ["Вершины и вулканы", "Загадки"]
+    from globe_quiz.ui import draw_text
+
+    s = app.scene.s
+    scratch = pygame.Surface(size)
+    for rect, level in app.scene.cards:  # название целиком внутри карточки
+        title = draw_text(scratch, level.title, int(36 * s), (255, 255, 255),
+                          (rect.centerx, rect.top + int(rect.height * 0.42)), width=rect.width - int(30 * s))
+        assert rect.contains(title), level.title
 
 
 @pytest.mark.parametrize("size", [(1024, 768), (1792, 982), (800, 600)])
@@ -400,8 +408,8 @@ def test_locked_cards_show_lock_below_title(app, size):
         app.scene.draw(surf)
         px = pygame.surfarray.array3d(surf)
         scratch = pygame.Surface(size)
-        locked = [(r, lv) for r, lv in app.scene.cards if not app.progress.is_unlocked(lv.id)]
-        assert len(locked) == 7
+        locked = [(r, lv) for r, lv in app.scene.cards if not app.progress.is_unlocked(lv)]
+        assert len(locked) == 10
         for rect, level in locked:
             title = draw_text(scratch, level.title, int(36 * s), (255, 255, 255),
                               (rect.centerx, rect.top + int(rect.height * 0.42)), width=rect.width - int(30 * s))

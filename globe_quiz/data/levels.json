@@ -1,7 +1,7 @@
 {
  "levels": [
   {
-   "id": 1, "title": "Материки", "hint_highlight": true,
+   "id": 1, "key": "continents", "title": "Материки", "hint_highlight": true,
    "questions": [
     {"text": "Найди Евразию", "accept": ["eurasia"]},
     {"text": "Найди Африку", "accept": ["africa"]},
@@ -12,7 +12,7 @@
    ]
   },
   {
-   "id": 2, "title": "Океаны", "hint_highlight": true,
+   "id": 2, "key": "oceans", "title": "Океаны", "hint_highlight": true,
    "questions": [
     {"text": "Найди Тихий океан", "accept": ["pacific_ocean"]},
     {"text": "Найди Атлантический океан", "accept": ["atlantic_ocean"]},
@@ -21,32 +21,26 @@
    ]
   },
   {
-   "id": 3, "title": "Полюса и экватор", "hint_highlight": true,
+   "id": 3, "key": "poles_equator", "title": "Полюса и экватор", "hint_highlight": true,
    "questions": [
     {"text": "Найди Северный полюс", "accept": ["north_pole"]},
     {"text": "Найди Южный полюс", "accept": ["south_pole"]},
-    {"text": "Найди экватор — воображаемую линию посередине Земли", "accept": ["equator"]},
-    {"text": "Ткни в любое место северного полушария", "accept": ["northern_hemisphere"],
-     "fact": "Северное полушарие — это всё, что севернее экватора."},
-    {"text": "Ткни в любое место южного полушария", "accept": ["southern_hemisphere"],
-     "fact": "Южное полушарие — это всё, что южнее экватора."},
-    {"text": "Найди материк, который целиком лежит в южном полушарии", "accept": ["australia", "antarctica"],
-     "fact": "Целиком в южном полушарии лежат два материка: Австралия и Антарктида."},
-    {"text": "Найди материк, через который проходит экватор", "accept": ["africa", "south_america"],
-     "fact": "Экватор пересекает два материка: Африку и Южную Америку."},
-    {"text": "Найди материк, который целиком лежит в северном полушарии", "accept": ["eurasia", "north_america"],
-     "fact": "Целиком в северном полушарии лежат Евразия и Северная Америка."},
-    {"text": "Найди океан, который целиком лежит в северном полушарии", "accept": ["arctic_ocean"],
-     "fact": "Северный Ледовитый океан — единственный океан, который весь лежит в северном полушарии."}
+    {"text": "Найди экватор", "accept": ["equator"]},
+    {"text": "Ткни в любое место северного полушария", "accept": ["northern_hemisphere"], "fact": "Северное полушарие — это всё, что севернее экватора.", "describes": true},
+    {"text": "Ткни в любое место южного полушария", "accept": ["southern_hemisphere"], "fact": "Южное полушарие — это всё, что южнее экватора.", "describes": true},
+    {"text": "Найди материк, который целиком лежит в южном полушарии", "accept": ["australia", "antarctica"], "fact": "Целиком в южном полушарии лежат два материка: Австралия и Антарктида.", "describes": true},
+    {"text": "Найди материк, через который проходит экватор", "accept": ["africa", "south_america"], "fact": "Экватор пересекает два материка: Африку и Южную Америку.", "describes": true},
+    {"text": "Найди материк, который целиком лежит в северном полушарии", "accept": ["eurasia", "north_america"], "fact": "Целиком в северном полушарии лежат Евразия и Северная Америка.", "describes": true},
+    {"text": "Найди океан, который целиком лежит в северном полушарии", "accept": ["arctic_ocean"], "fact": "Северный Ледовитый океан — единственный океан, который весь лежит в северном полушарии.", "describes": true}
    ]
   },
   {
-   "id": 4, "title": "Острова и полуострова",
+   "id": 4, "key": "islands", "title": "Острова",
    "questions": [
     {"text": "Найди остров Великобритания", "accept": ["great_britain"]},
     {"text": "Найди остров Ирландия", "accept": ["ireland"]},
     {"text": "Найди остров Исландия", "accept": ["iceland"]},
-    {"text": "Найди остров Гренландия — самый большой остров Земли", "accept": ["greenland"]},
+    {"text": "Найди остров Гренландия", "accept": ["greenland"]},
     {"text": "Найди Японские острова", "accept": ["japan_islands"]},
     {"text": "Найди остров Мадагаскар", "accept": ["madagascar"]},
     {"text": "Найди Новую Зеландию", "accept": ["new_zealand"]},
@@ -54,44 +48,99 @@
     {"text": "Найди остров Калимантан", "accept": ["kalimantan"]},
     {"text": "Найди остров Тасмания", "accept": ["tasmania"]},
     {"text": "Найди остров Шри-Ланка", "accept": ["sri_lanka"]},
+    {"text": "Найди остров Сахалин", "accept": ["sakhalin"]},
+    {"text": "Найди остров Куба", "accept": ["cuba"]},
+    {"text": "Найди остров Сицилия", "accept": ["sicily"]},
+    {"text": "Найди остров Сардиния", "accept": ["sardinia"]},
+    {"text": "Найди остров Сулавеси", "accept": ["sulawesi"]},
+    {"text": "Найди Филиппинские острова", "accept": ["philippines"]},
+    {"text": "Найди остров Тайвань", "accept": ["taiwan"]},
+    {"text": "Найди остров Хайнань", "accept": ["hainan"]},
+    {"text": "Найди острова Новая Земля", "accept": ["novaya_zemlya"]},
+    {"text": "Найди остров Ньюфаундленд", "accept": ["newfoundland"]}
+   ]
+  },
+  {
+   "id": 5, "key": "peninsulas", "title": "Полуострова",
+   "questions": [
     {"text": "Найди Скандинавский полуостров", "accept": ["scandinavian_peninsula"]},
     {"text": "Найди Пиренейский полуостров", "accept": ["iberian_peninsula"]},
-    {"text": "Найди Апеннинский полуостров — он похож на сапог", "accept": ["apennine_peninsula"]},
+    {"text": "Найди Апеннинский полуостров", "accept": ["apennine_peninsula"]},
     {"text": "Найди Аравийский полуостров", "accept": ["arabian_peninsula"]},
     {"text": "Найди полуостров Индостан", "accept": ["hindustan"]},
     {"text": "Найди полуостров Камчатка", "accept": ["kamchatka"]},
     {"text": "Найди полуостров Аляска", "accept": ["alaska"]},
-    {"text": "Найди полуостров Флорида", "accept": ["florida"]}
+    {"text": "Найди полуостров Флорида", "accept": ["florida"]},
+    {"text": "Найди полуостров Индокитай", "accept": ["indochina"]},
+    {"text": "Найди полуостров Малакка", "accept": ["malacca"]},
+    {"text": "Найди Балканский полуостров", "accept": ["balkan_peninsula"]},
+    {"text": "Найди полуостров Малая Азия", "accept": ["asia_minor"]},
+    {"text": "Найди Сомалийский полуостров", "accept": ["somali_peninsula"]},
+    {"text": "Найди полуостров Юкатан", "accept": ["yucatan"]},
+    {"text": "Найди полуостров Калифорния", "accept": ["baja_california"]},
+    {"text": "Найди полуостров Лабрадор", "accept": ["labrador"]},
+    {"text": "Найди Корейский полуостров", "accept": ["korean_peninsula"]},
+    {"text": "Найди полуостров Чукотка", "accept": ["chukotka"]},
+    {"text": "Найди Кольский полуостров", "accept": ["kola_peninsula"]},
+    {"text": "Найди полуостров Ютландия", "accept": ["jutland"]}
    ]
   },
   {
-   "id": 5, "title": "Моря, заливы и озёра",
+   "id": 6, "key": "seas", "title": "Моря",
    "questions": [
     {"text": "Найди Средиземное море", "accept": ["mediterranean_sea"]},
     {"text": "Найди Чёрное море", "accept": ["black_sea"]},
     {"text": "Найди Балтийское море", "accept": ["baltic_sea"]},
     {"text": "Найди Красное море", "accept": ["red_sea"]},
     {"text": "Найди Карибское море", "accept": ["caribbean_sea"]},
-    {"text": "Найди Каспийское море", "accept": ["caspian_sea"]},
-    {"text": "Найди Персидский залив", "accept": ["persian_gulf"]},
-    {"text": "Найди Мексиканский залив", "accept": ["gulf_of_mexico"]},
-    {"text": "Найди Гудзонов залив", "accept": ["hudson_bay"]}
+    {"text": "Найди Северное море", "accept": ["north_sea"]},
+    {"text": "Найди Баренцево море", "accept": ["barents_sea"]},
+    {"text": "Найди Белое море", "accept": ["white_sea"]},
+    {"text": "Найди Охотское море", "accept": ["sea_of_okhotsk"]},
+    {"text": "Найди Японское море", "accept": ["sea_of_japan"]},
+    {"text": "Найди Берингово море", "accept": ["bering_sea"]},
+    {"text": "Найди Аравийское море", "accept": ["arabian_sea"]},
+    {"text": "Найди Южно-Китайское море", "accept": ["south_china_sea"]},
+    {"text": "Найди Тасманово море", "accept": ["tasman_sea"]},
+    {"text": "Найди Жёлтое море", "accept": ["yellow_sea"]},
+    {"text": "Найди Адриатическое море", "accept": ["adriatic_sea"]}
    ]
   },
   {
-   "id": 6, "title": "Горы, равнины и пустыни",
+   "id": 7, "key": "gulfs", "title": "Заливы и озёра",
+   "questions": [
+    {"text": "Найди Каспийское море", "accept": ["caspian_sea"]},
+    {"text": "Найди Персидский залив", "accept": ["persian_gulf"]},
+    {"text": "Найди Мексиканский залив", "accept": ["gulf_of_mexico"]},
+    {"text": "Найди Гудзонов залив", "accept": ["hudson_bay"]},
+    {"text": "Найди Бенгальский залив", "accept": ["bay_of_bengal"]},
+    {"text": "Найди Гвинейский залив", "accept": ["gulf_of_guinea"]},
+    {"text": "Найди Бискайский залив", "accept": ["bay_of_biscay"]}
+   ]
+  },
+  {
+   "id": 8, "key": "mountains", "title": "Горы и нагорья",
    "questions": [
     {"text": "Найди Альпы", "accept": ["alps"]},
     {"text": "Найди горы Кавказ", "accept": ["caucasus"]},
     {"text": "Найди Уральские горы", "accept": ["ural_mountains"]},
     {"text": "Найди Скандинавские горы", "accept": ["scandinavian_mountains"]},
-    {"text": "Найди горы Атлас на севере Африки", "accept": ["atlas"]},
+    {"text": "Найди горы Атлас", "accept": ["atlas"]},
     {"text": "Найди горы Гималаи", "accept": ["himalayas"]},
     {"text": "Найди Тибетское нагорье", "accept": ["tibetan_plateau"]},
     {"text": "Найди Эфиопское нагорье", "accept": ["ethiopian_highlands"]},
     {"text": "Найди горы Анды", "accept": ["andes"]},
     {"text": "Найди горы Кордильеры", "accept": ["cordillera"]},
-    {"text": "Найди Большой Водораздельный хребет в Австралии", "accept": ["great_dividing_range"]},
+    {"text": "Найди Большой Водораздельный хребет", "accept": ["great_dividing_range"]},
+    {"text": "Найди горы Пиренеи", "accept": ["pyrenees"]},
+    {"text": "Найди горы Памир", "accept": ["pamir"]},
+    {"text": "Найди горы Алтай", "accept": ["altai"]},
+    {"text": "Найди Бразильское плоскогорье", "accept": ["brazilian_highlands"]}
+   ]
+  },
+  {
+   "id": 9, "key": "plains_deserts", "title": "Равнины и пустыни",
+   "questions": [
     {"text": "Найди Восточно-Европейскую равнину", "accept": ["east_european_plain"]},
     {"text": "Найди Западно-Сибирскую равнину", "accept": ["west_siberian_plain"]},
     {"text": "Найди Амазонскую низменность", "accept": ["amazon_lowland"]},
@@ -101,18 +150,18 @@
    ]
   },
   {
-   "id": 7, "title": "Вершины и вулканы",
+   "id": 10, "key": "peaks", "title": "Вершины и вулканы",
    "questions": [
     {"text": "Найди гору Эверест (Джомолунгму)", "accept": ["everest"]},
-    {"text": "Найди Килиманджаро — самую высокую гору Африки", "accept": ["kilimanjaro"]},
+    {"text": "Найди гору Килиманджаро", "accept": ["kilimanjaro"]},
     {"text": "Найди гору Эльбрус", "accept": ["elbrus"]},
-    {"text": "Найди гору Монблан в Альпах", "accept": ["mont_blanc"]},
-    {"text": "Найди гору Аконкагуа в Андах", "accept": ["aconcagua"]},
-    {"text": "Найди гору Денали на Аляске", "accept": ["denali"]}
+    {"text": "Найди гору Монблан", "accept": ["mont_blanc"]},
+    {"text": "Найди гору Аконкагуа", "accept": ["aconcagua"]},
+    {"text": "Найди гору Денали", "accept": ["denali"]}
    ]
   },
   {
-   "id": 8, "title": "Загадки", "riddles": true,
+   "id": 11, "key": "riddles", "title": "Загадки", "riddles": true,
    "questions": [
     {"text": "Найди самый большой материк", "accept": ["eurasia"]},
     {"text": "Найди самый маленький материк", "accept": ["australia"]},
@@ -130,7 +179,11 @@
     {"text": "Найди самую высокую гору Африки — это спящий вулкан", "accept": ["kilimanjaro"]},
     {"text": "Найди горы, по которым проходит граница Европы и Азии", "accept": ["ural_mountains"]},
     {"text": "Найди самое высокое нагорье — «крышу мира»", "accept": ["tibetan_plateau"]},
-    {"text": "Найди самый большой остров на Земле", "accept": ["greenland"]}
+    {"text": "Найди самый большой остров на Земле", "accept": ["greenland"]},
+    {"text": "Найди самый большой полуостров на Земле", "accept": ["arabian_peninsula"]},
+    {"text": "Найди море, которое лежит между Европой и Африкой", "accept": ["mediterranean_sea"]},
+    {"text": "Найди самый большой остров России", "accept": ["sakhalin"]},
+    {"text": "Найди самый большой остров Средиземного моря", "accept": ["sicily"]}
    ]
   }
  ]

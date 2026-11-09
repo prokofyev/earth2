@@ -22,11 +22,13 @@ class Question:
     text: str
     accept: tuple[str, ...]
     fact: str | None = None
+    describes: bool = False  # вопрос-описание (рассуждение), объект в тексте не назван
 
 
 @dataclass(frozen=True)
 class Level:
-    id: int
+    id: int  # место в списке уровней (1, 2, 3…) — для показа в меню
+    key: str  # постоянное имя: к нему привязан прогресс, номер может меняться
     title: str
     questions: tuple[Question, ...]
     hint_highlight: bool = False
@@ -36,13 +38,19 @@ class Level:
 def load_levels(path: Path = DATA_DIR / "levels.json") -> list[Level]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     levels = []
-    for raw in data["levels"]:
+    for n, raw in enumerate(data["levels"], start=1):
+        if raw["id"] != n:
+            raise ValueError(f"уровень «{raw['title']}»: номер {raw['id']}, а по порядку должен быть {n}")
+        if any(lv.key == raw["key"] for lv in levels):
+            raise ValueError(f"повторяется имя уровня {raw['key']!r}")
         questions = tuple(
-            Question(q["text"], tuple(q["accept"]), q.get("fact")) for q in raw["questions"]
+            Question(q["text"], tuple(q["accept"]), q.get("fact"), q.get("describes", False))
+            for q in raw["questions"]
         )
         levels.append(
             Level(
                 id=raw["id"],
+                key=raw["key"],
                 title=raw["title"],
                 questions=questions,
                 hint_highlight=raw.get("hint_highlight", False),
@@ -50,6 +58,17 @@ def load_levels(path: Path = DATA_DIR / "levels.json") -> list[Level]:
             )
         )
     return levels
+
+
+def next_level(levels: list[Level], level: Level) -> Level | None:
+    """Следующий уровень по порядку или None для последнего."""
+    i = levels.index(level)
+    return levels[i + 1] if i + 1 < len(levels) else None
+
+
+def previous_level(levels: list[Level], level: Level) -> Level | None:
+    i = levels.index(level)
+    return levels[i - 1] if i > 0 else None
 
 
 class Result(Enum):

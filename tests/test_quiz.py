@@ -7,7 +7,7 @@ from globe_quiz.quiz import Level, LevelRun, Question, Result
 
 def _level(n=10, hint=True):
     qs = tuple(Question(f"Вопрос {i}", (f"r{i}",)) for i in range(n))
-    return Level(id=1, title="Тест", questions=qs, hint_highlight=hint)
+    return Level(id=1, key="test", title="Тест", questions=qs, hint_highlight=hint)
 
 
 def test_at_most_eight_unique_questions():
