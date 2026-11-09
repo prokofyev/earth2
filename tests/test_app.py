@@ -147,6 +147,8 @@ def test_full_flow_level_one(app, tmp_path):
         assert scene.state == CORRECT, q.text
         for _ in range(90):
             frame(app)
+        while app.globe.busy:  # объект под панелью с фактом — глобус поворачивается
+            frame(app, dt=0.05)
         last = scene.run.is_last
         frame(app, [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
         if last:
@@ -194,6 +196,8 @@ def test_all_levels_in_a_row_from_fresh_start(app):
             click(app, target_screen_pos(app, q.accept[0]))
             assert scene.state == CORRECT, (level.title, q.text)
             last = scene.run.is_last
+            while app.globe.busy:  # объект под панелью с фактом — глобус поворачивается
+                frame(app, dt=0.05)
             frame(app, [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
             if last:
                 break

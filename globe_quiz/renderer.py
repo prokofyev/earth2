@@ -29,6 +29,8 @@ _SEAM_PX = 0.6  # на сколько пикселей раздвигаем гр
 _SEAM_PX_RIM = 1.0  # то же за кругом океана, где под гранями космос
 _OUTER_RADIUS = 1.0  # самая высокая точка модели — всё, что видно, внутри этого круга
 _DISK_KEY = (255, 0, 255)
+_DISK_HOLE = (0, 255, 0)  # цвет круга в маске края океана: он становится прозрачным
+_OCEAN_TEMPLATE_PX = 1024  # шаблон освещённого круга океана — один на любой масштаб
 
 
 def view_matrix(center_lat: float, center_lon: float) -> np.ndarray:
@@ -181,8 +183,7 @@ class GlobeRenderer:
         n_back = int(np.searchsorted(group[sel], 1))
         for poly, col in zip(polys[:n_back], cols[:n_back]):
             polygon(surf, col, poly)
-        disk = self._ocean_disk(scale * m.sea_radius)
-        surf.blit(disk, (cx - disk.get_width() // 2, cy - disk.get_height() // 2))
+        self._blit_ocean(surf, (cx, cy), scale * m.sea_radius)
         for poly, col in zip(polys[n_back:], cols[n_back:]):
             polygon(surf, col, poly)
         # За кругом океана подложки нет: швы между гранями там видны точками
@@ -202,31 +203,65 @@ class GlobeRenderer:
             self._clip_to_disk(surf, rect, (cx, cy), scale, outside)
         self.frame = Frame(order=idx, pts=pts, rot=rot, scale=scale, center=(cx, cy))
 
-    def _ocean_disk(self, radius: float) -> pygame.Surface:
-        """Круг океана с освещением гладкой сферы (свет задан в координатах экрана)."""
-        key = round(radius * 2) / 2 + 2  # на 2 пикселя шире: стыки обрывов с краем океана без щелей
-        cache = self.__dict__.setdefault("_disk_cache", {})
-        disk = cache.get(key)
-        if disk is None:
-            size = 2 * int(math.ceil(key)) + 3
-            c = (size - 1) / 2
-            x, y = np.meshgrid(np.arange(size) - c, np.arange(size) - c, indexing="ij")
-            r2 = (x * x + y * y) / (key * key)
-            inside = r2 <= 1.0
-            nz = np.sqrt(np.clip(1.0 - r2, 0.0, 1.0))
-            dot = (x / key) * _LIGHT[0] + (-y / key) * _LIGHT[1] + nz * _LIGHT[2]
+    def _ocean_template(self) -> pygame.Surface:
+        """Освещённая гладкая сфера в квадрате _OCEAN_TEMPLATE_PX: её край — край квадрата.
+
+        Освещение зависит только от точки в долях радиуса, поэтому один шаблон годится
+        для любого масштаба. За кругом цвет края продолжен: при масштабировании на краю
+        нет каймы, а точный край отрезает маска в _blit_ocean.
+        """
+        template = getattr(self, "_template", None)
+        if template is None:
+            n = _OCEAN_TEMPLATE_PX
+            c = (n - 1) / 2
+            x, y = np.meshgrid(np.arange(n) - c, np.arange(n) - c, indexing="ij")
+            x, y = x / (n / 2), y / (n / 2)
+            rho = np.maximum(1.0, np.hypot(x, y))  # за кругом — точка края в том же направлении
+            x, y = x / rho, y / rho
+            nz = np.sqrt(np.clip(1.0 - x * x - y * y, 0.0, 1.0))
+            dot = x * _LIGHT[0] - y * _LIGHT[1] + nz * _LIGHT[2]
             light = _AMBIENT + (1 - _AMBIENT) * np.clip(dot, 0, 1)
             rgb = np.clip(np.array(WATER_COLOR, float) * light[..., None], 0, 255).astype(np.uint8)
-            rgb[~inside] = _DISK_KEY
-            disk = pygame.surfarray.make_surface(rgb)
-            disk.set_colorkey(_DISK_KEY)
+            template = pygame.surfarray.make_surface(rgb)
             if pygame.display.get_surface() is not None:
-                disk = disk.convert()
-                disk.set_colorkey(_DISK_KEY)
-            if len(cache) > 32:  # при плавном зуме радиусы меняются — не копим лишнее
-                cache.clear()
-            cache[key] = disk
-        return disk
+                template = template.convert()
+            self._template = template
+        return template
+
+    def _blit_ocean(self, surf: pygame.Surface, center: tuple[float, float], radius: float) -> None:
+        """Круг океана: из шаблона масштабируется только та часть, что видна в surf.
+
+        Круг на 2 пикселя шире моря — стыки обрывов с краем океана без щелей.
+        Цена зависит от размера видимой части, а не от радиуса, поэтому сильный зум
+        не тормозит.
+        """
+        key = radius + 2
+        cx, cy = center
+        left, top = cx - key, cy - key
+        box = pygame.Rect(math.floor(left), math.floor(top), math.ceil(2 * key) + 2, math.ceil(2 * key) + 2)
+        win = box.clip(surf.get_rect())
+        if win.width <= 0 or win.height <= 0:
+            return
+        template = self._ocean_template()
+        k = _OCEAN_TEMPLATE_PX / (2 * key)  # пикселей шаблона на пиксель экрана
+        tx0 = max(0, math.floor((win.left - left) * k))
+        ty0 = max(0, math.floor((win.top - top) * k))
+        tx1 = min(_OCEAN_TEMPLATE_PX, max(tx0 + 1, math.ceil((win.right - left) * k)))
+        ty1 = min(_OCEAN_TEMPLATE_PX, max(ty0 + 1, math.ceil((win.bottom - top) * k)))
+        piece = pygame.transform.scale(template.subsurface((tx0, ty0, tx1 - tx0, ty1 - ty0)), win.size)
+        corners = ((win.left, win.top), (win.right, win.top), (win.left, win.bottom), (win.right, win.bottom))
+        if max(math.hypot(x - cx, y - cy) for x, y in corners) > key:
+            # Край круга виден — отрезаем всё за ним маской с точной окружностью.
+            mask = getattr(self, "_ocean_mask", None)
+            if mask is None or mask.get_size() != win.size:
+                mask = pygame.Surface(win.size)
+                mask.set_colorkey(_DISK_HOLE)
+                self._ocean_mask = mask
+            mask.fill(_DISK_KEY)
+            pygame.draw.circle(mask, _DISK_HOLE, (cx - win.left, cy - win.top), key)
+            piece.blit(mask, (0, 0))
+            piece.set_colorkey(_DISK_KEY)
+        surf.blit(piece, win.topleft)
 
     def _clip_to_disk(self, surf, rect, center, scale, outside) -> None:
         """Закрашивает всё за кругом радиуса 1 цветом фона — страховка от осколков за силуэтом."""
