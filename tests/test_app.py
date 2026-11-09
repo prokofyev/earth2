@@ -485,3 +485,143 @@ def test_last_question_after_reveal_goes_to_result(app):
     _miss_three_times(app, scene)
     frame(app, [pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN)])
     assert isinstance(app.scene, ResultScene)
+
+
+# --- Кнопка «назад» и Esc --------------------------------------------------------
+
+
+def _drawn_texts(app, monkeypatch, module):
+    """Строки, которые сцена рисует за кадр (draw_text модуля сцены)."""
+    import importlib
+
+    mod = importlib.import_module(module)
+    seen = []
+    real = mod.draw_text
+
+    def spy(surf, text, *a, **kw):
+        seen.append(text)
+        return real(surf, text, *a, **kw)
+
+    monkeypatch.setattr(mod, "draw_text", spy)
+    frame(app)
+    monkeypatch.setattr(mod, "draw_text", real)
+    return seen
+
+
+def test_level_back_button_place_and_esc(app):
+    app.switch(LevelScene(app, app.levels[0]))
+    frame(app)
+    s = app.scene.s
+    btn = app.scene.btn_menu
+    assert btn.text == "‹ В меню"
+    assert btn.rect == pygame.Rect(int(20 * s), int(20 * s), int(190 * s), int(56 * s))
+    click(app, btn.rect.center)
+    assert isinstance(app.scene, MenuScene)
+    app.switch(LevelScene(app, app.levels[0]))
+    press(app, pygame.K_ESCAPE)
+    assert isinstance(app.scene, MenuScene)
+
+
+def test_menu_exit_button_equals_esc(app):
+    app.switch(MenuScene(app))
+    frame(app)
+    back = app.scene.btn_back
+    assert back.text == "‹ Выход" and back.rect.topleft == (int(20 * app.scene.s), int(20 * app.scene.s))
+    click(app, back.rect.center)
+    assert app.running is False
+    app.running = True
+    press(app, pygame.K_ESCAPE)
+    assert app.running is False
+
+
+def test_menu_has_no_esc_caption(app, monkeypatch):
+    app.switch(MenuScene(app))
+    texts = _drawn_texts(app, monkeypatch, "globe_quiz.scenes.menu")
+    assert not any("Esc" in t for t in texts) and not any(t.startswith("Играет") for t in texts)
+
+
+@pytest.mark.parametrize("size", [(800, 600), (1024, 768), (1792, 982)])
+@pytest.mark.parametrize("name", ["Тест", "Очень-очень-длин"])
+def test_menu_player_button_shows_name(app, size, name):
+    from globe_quiz.ui import draw_text, font
+
+    app.players.players[name] = app.players.players.pop("Тест") if name != "Тест" else app.players.progress
+    app.players.current = name
+    surf = pygame.display.set_mode(size)
+    try:
+        app.switch(MenuScene(app))
+        app.scene.layout(size)
+        s = app.scene.s
+        btn, back = app.scene.btn_player, app.scene.btn_back
+        assert btn.text == name
+        assert font(int(28 * s)).size(name)[0] < btn.rect.width  # имя целиком
+        assert surf.get_rect().contains(btn.rect) and not btn.rect.colliderect(back.rect)
+        title = draw_text(pygame.Surface(size), "Выбери уровень", int(72 * s), (255, 255, 255), (size[0] // 2, int(75 * s)))
+        assert not title.colliderect(btn.rect) and not title.colliderect(back.rect)
+    finally:
+        pygame.display.set_mode((800, 600))
+
+
+def test_player_button_opens_players_and_back(app, monkeypatch):
+    from globe_quiz.scenes.players import PlayersScene
+
+    app.switch(MenuScene(app))
+    frame(app)
+    click(app, app.scene.btn_player.rect.center)
+    scene = app.scene
+    assert isinstance(scene, PlayersScene) and scene.title == "Кто играет?"
+    texts = _drawn_texts(app, monkeypatch, "globe_quiz.scenes.players")
+    assert not any("Esc" in t for t in texts)
+    assert scene.btn_back.text == "‹ В меню" and scene.btn_back.rect.topleft == (int(20 * scene.s), int(20 * scene.s))
+    click(app, scene.btn_back.rect.center)
+    assert isinstance(app.scene, MenuScene) and app.players.current == "Тест"
+    frame(app)
+    click(app, app.scene.btn_player.rect.center)
+    press(app, pygame.K_ESCAPE)
+    assert isinstance(app.scene, MenuScene)
+
+
+def test_new_player_entry_esc_cancels(app):
+    from globe_quiz.scenes.players import PlayersScene
+
+    app.switch(PlayersScene(app))
+    frame(app)
+    click(app, app.scene.btn_new.rect.center)
+    scene = app.scene
+    assert scene.entering
+    click(app, scene.btn_back.rect.center)  # во время ввода кнопки «назад» нет
+    assert isinstance(app.scene, PlayersScene) and scene.entering
+    press(app, pygame.K_ESCAPE)
+    assert isinstance(app.scene, PlayersScene) and not scene.entering  # Esc отменил ввод
+    pygame.key.stop_text_input()
+
+
+def test_first_run_has_no_back(fresh_app):
+    from globe_quiz.scenes.players import PlayersScene
+
+    app = fresh_app
+    frame(app)
+    click(app, (10, 10))  # с заставки
+    scene = app.scene
+    assert isinstance(scene, PlayersScene) and scene.title == "Как тебя зовут?"
+    click(app, scene.btn_back.rect.center)
+    press(app, pygame.K_ESCAPE)
+    assert app.scene is scene and scene.entering  # остались на вводе имени
+
+
+def test_switch_player_renames_menu_button(app):
+    from globe_quiz.scenes.players import PlayersScene
+
+    app.players.add("Маша")
+    app.players.select("Тест")
+    app.switch(MenuScene(app))
+    frame(app)
+    assert app.scene.btn_player.text == "Тест"
+    click(app, app.scene.btn_player.rect.center)
+    assert isinstance(app.scene, PlayersScene)
+    frame(app)
+    masha = next(b for b in app.scene.player_buttons if b.text == "Маша")
+    click(app, masha.rect.center)
+    assert isinstance(app.scene, MenuScene)
+    frame(app)
+    assert app.scene.btn_player.text == "Маша"

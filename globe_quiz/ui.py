@@ -216,6 +216,19 @@ class Button:
         draw_text(surf, self.text, size, TEXT, self.rect.center)
 
 
+# Кнопка «назад» в левом верхнем углу — одна на всех экранах; Esc делает то же самое.
+def back_button(text: str) -> Button:
+    return Button(f"‹ {text}")
+
+
+def place_back_button(btn: Button, s: float) -> None:
+    btn.rect = pygame.Rect(int(20 * s), int(20 * s), int(190 * s), int(56 * s))
+
+
+def draw_back_button(btn: Button, surf, s: float) -> None:
+    btn.draw(surf, text_size=int(30 * s))
+
+
 # Звёздное небо за Землёй: поворачивается тем же видом, что и глобус, и поэтому
 # плывёт навстречу материкам, как при облёте планеты.
 SKY_THETA_MAX = 120.0  # до какого угла от центра вида показываем небо, градусы

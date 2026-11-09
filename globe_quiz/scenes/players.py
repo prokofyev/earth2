@@ -8,8 +8,8 @@ import pygame
 
 from ..app import Scene
 from ..progress import MAX_NAME_LENGTH
-from ..ui import (ACCENT, BAD, BUTTON, PANEL, PANEL_EDGE, TEXT, TEXT_DIM, Button, draw_panel, draw_text,
-                  font, ui_scale)
+from ..ui import (ACCENT, BAD, BUTTON, PANEL, PANEL_EDGE, TEXT, TEXT_DIM, Button, back_button, draw_back_button,
+                  draw_panel, draw_text, font, place_back_button, ui_scale)
 
 NAME_CHARS_EXTRA = set(" -")
 
@@ -28,6 +28,7 @@ class PlayersScene(Scene):
         self.btn_new = Button("Новый игрок")
         self.btn_ok = Button("Готово")
         self.btn_cancel = Button("Отмена", color=(90, 96, 140), hover_color=(110, 118, 170))
+        self.btn_back = back_button("В меню")
         self.app.globe.auto_spin = 8.0
         if self.entering:
             pygame.key.start_text_input()
@@ -42,6 +43,7 @@ class PlayersScene(Scene):
         w, h = size
         self.s = s = ui_scale(pygame.display.get_surface())
         self.app.globe.set_rect(pygame.Rect(0, 0, w, h))
+        place_back_button(self.btn_back, s)
         names = self.app.players.names
         bw, bh, gap = int(320 * s), int(80 * s), int(20 * s)
         cols = max(1, min(3, (w - gap) // (bw + gap)))
@@ -78,8 +80,8 @@ class PlayersScene(Scene):
         if self.entering:
             self._handle_entering(event)
             return
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self._to_menu()
+        if self.btn_back.handle(event) or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+            self._to_menu()  # «‹ В меню» и Esc равноценны
             return
         for btn in self.player_buttons:
             if btn.handle(event):
@@ -172,4 +174,4 @@ class PlayersScene(Scene):
             for btn in self.player_buttons:
                 btn.draw(surf, text_size=int(38 * s))
             self.btn_new.draw(surf, text_size=int(34 * s))
-            draw_text(surf, "Esc — назад", int(22 * s), TEXT_DIM, (w // 2, h - int(30 * s)))
+            draw_back_button(self.btn_back, surf, s)

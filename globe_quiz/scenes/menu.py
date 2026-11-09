@@ -1,4 +1,4 @@
-"""Меню уровней на фоне вращающейся Земли: карточки, имя игрока, смена игрока."""
+"""Меню уровней на фоне вращающейся Земли: карточки, «‹ Выход» и кнопка с именем игрока."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ import pygame
 
 from ..app import Scene
 from ..quiz import MAX_QUESTIONS, previous_level
-from ..ui import (ACCENT, BAD, PANEL, PANEL_EDGE, STAR_EMPTY, TEXT, TEXT_DIM, Button, draw_lock,
-                  draw_panel, draw_star, draw_text, ui_scale)
+from ..ui import (ACCENT, BAD, PANEL, PANEL_EDGE, STAR_EMPTY, TEXT, TEXT_DIM, Button, back_button,
+                  draw_back_button, draw_lock, draw_panel, draw_star, draw_text, font, place_back_button,
+                  ui_scale)
 
 
 def lock_place(card: pygame.Rect, title: pygame.Rect, s: float) -> tuple[tuple[int, int], int]:
@@ -27,7 +28,8 @@ class MenuScene(Scene):
         self.message = ""
         self.message_t = 0.0
         self._pressed = None
-        self.btn_player = Button("Сменить игрока")
+        self.btn_back = back_button("Выход")
+        self.btn_player = Button(self.app.players.current or "")
         g = self.app.globe
         g.view.zoom = g.target_zoom = 1.0
         g.view.center_lat = 20.0
@@ -54,8 +56,16 @@ class MenuScene(Scene):
             self.cards.append((rect, level))
         globe_top = int(120 * s)  # глобус ниже заголовка, чтобы тот читался
         self.app.globe.set_rect(pygame.Rect(0, globe_top, w, h - globe_top))
-        self.btn_player.rect = pygame.Rect(0, 0, int(270 * s), int(56 * s))
+        place_back_button(self.btn_back, s)
+        # Кнопка игрока — по ширине имени, но не уже кнопки «назад».
+        self.btn_player.text = self.app.players.current or ""
+        text_w = font(int(28 * s)).size(self.btn_player.text)[0]
+        self.btn_player.rect = pygame.Rect(0, 0, max(int(190 * s), text_w + int(48 * s)), int(56 * s))
         self.btn_player.rect.topright = (w - int(20 * s), int(20 * s))
+
+    def _quit(self) -> None:
+        """«‹ Выход» и Esc в меню закрывают игру."""
+        self.app.running = False
 
     def _card_at(self, pos):
         for rect, level in self.cards:
@@ -64,13 +74,16 @@ class MenuScene(Scene):
         return None
 
     def handle(self, event) -> None:
+        if self.btn_back.handle(event):
+            self._quit()
+            return
         if self.btn_player.handle(event):
             from .players import PlayersScene
 
             self.app.switch(PlayersScene(self.app))
             return
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.app.running = False
+            self._quit()
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             self._pressed = self._card_at(event.pos)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
@@ -102,8 +115,7 @@ class MenuScene(Scene):
         shade.fill((8, 12, 38, 70))
         surf.blit(shade, (0, 0))
         draw_text(surf, "Выбери уровень", int(72 * s), ACCENT, (w // 2, int(75 * s)))
-        name = self.app.players.current or ""
-        draw_text(surf, f"Играет: {name}", int(34 * s), TEXT, (int(24 * s), int(48 * s)), anchor="midleft")
+        draw_back_button(self.btn_back, surf, s)
         self.btn_player.draw(surf, text_size=int(28 * s))
         progress = self.app.progress
         mouse = pygame.mouse.get_pos()
@@ -134,5 +146,3 @@ class MenuScene(Scene):
                 draw_lock(surf, *lock_place(rect, title_rect, s))
         if self.message_t > 0:
             draw_text(surf, self.message, int(32 * s), BAD, (w // 2, h - int(45 * s)), width=w - 40)
-        else:
-            draw_text(surf, "Esc — выход", int(22 * s), TEXT_DIM, (w // 2, h - int(30 * s)))

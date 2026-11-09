@@ -10,8 +10,8 @@ from ..fx import StarFlight
 from ..globe_widget import ZOOM_STEP, Marker
 from ..quiz import LevelRun, Result
 from ..regions import Region
-from ..ui import (ACCENT, BAD, GOOD, PANEL, TEXT, TEXT_DIM, Button, draw_panel, draw_star, draw_text,
-                  text_height, ui_scale)
+from ..ui import (ACCENT, BAD, GOOD, PANEL, TEXT, TEXT_DIM, Button, back_button, draw_back_button, draw_panel,
+                  draw_star, draw_text, place_back_button, text_height, ui_scale)
 
 ASK, MISS, CORRECT, REVEAL = "ask", "miss", "correct", "reveal"
 FOUND_COLOR = (90, 230, 110)
@@ -47,7 +47,7 @@ class LevelScene(Scene):
         self.flights: list[StarFlight] = []
         self.shown_stars = 0
         self.ui_press = False
-        self.btn_menu = Button("‹ В меню")
+        self.btn_menu = back_button("В меню")
         self.btn_plus = Button("+")
         self.btn_minus = Button("−")
         self.btn_next = Button("Дальше ›", visible=False)
@@ -64,7 +64,7 @@ class LevelScene(Scene):
         w, h = size
         self.s = s = ui_scale(pygame.display.get_surface())
         self.top_h = int(130 * s)
-        self.btn_menu.rect = pygame.Rect(int(20 * s), int(20 * s), int(190 * s), int(56 * s))
+        place_back_button(self.btn_menu, s)
         bsz = int(70 * s)
         self.btn_plus.rect = pygame.Rect(w - bsz - int(24 * s), h - 2 * bsz - int(44 * s), bsz, bsz)
         self.btn_minus.rect = pygame.Rect(w - bsz - int(24 * s), h - bsz - int(24 * s), bsz, bsz)
@@ -221,8 +221,9 @@ class LevelScene(Scene):
         draw_star(surf, (self.counter_pos[0] - int(40 * s), self.counter_pos[1]), int(26 * s))
         draw_text(surf, f"{self.shown_stars}", int(48 * s), ACCENT,
                   (self.counter_pos[0] - int(5 * s), self.counter_pos[1]), anchor="midleft")
-        for b in (self.btn_menu, self.btn_plus, self.btn_minus):
-            b.draw(surf, text_size=int(30 * s) if b is self.btn_menu else int(50 * s))
+        draw_back_button(self.btn_menu, surf, s)
+        for b in (self.btn_plus, self.btn_minus):
+            b.draw(surf, text_size=int(50 * s))
 
         if self.state != ASK and self.title:
             self._draw_message(surf)
