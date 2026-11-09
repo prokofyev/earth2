@@ -224,7 +224,34 @@ NEW_OBJECTS = [  # (точка, регион, материк или океан)
     ((38.0, 73.3), "pamir", "eurasia"),
     ((47.9, 87.8), "altai", "eurasia"),
     ((-14.5, -47.0), "brazilian_highlands", "south_america"),
+    ((38.0, -99.0), "great_plains", "north_america"),  # Канзас
+    ((47.0, -101.0), "great_plains", "north_america"),  # Северная Дакота
+    ((39.0, 116.0), "north_china_plain", "eurasia"),  # Пекин
+    ((28.6, 77.2), "indo_gangetic_plain", "eurasia"),  # Дели
+    ((25.6, 85.1), "indo_gangetic_plain", "eurasia"),  # Патна
+    ((-34.0, -61.0), "la_plata_lowland", "south_america"),  # пампа
+    ((-24.0, -61.0), "la_plata_lowland", "south_america"),  # Гран-Чако
+    ((43.0, 105.0), "gobi", "eurasia"),
+    ((-23.0, 22.0), "kalahari", "africa"),
 ]
+
+
+NOT_IN = [  # точка, где региона быть не должно
+    ((41.0, -112.0), "great_plains"),  # Солт-Лейк-Сити — Кордильеры
+    ((36.0, 120.5), "north_china_plain"),  # Шаньдунские горы и Жёлтое море рядом
+    ((-24.0, -66.0), "la_plata_lowland"),  # Анды
+]
+
+
+@pytest.mark.parametrize("point,region_id", NOT_IN)
+def test_region_not_at_point(earth, regions, point, region_id):
+    assert region_id not in [r.id for r in regions.regions_of_face(face_at(earth, *point))]
+
+
+@pytest.mark.parametrize("region_id", ["great_plains", "north_china_plain", "indo_gangetic_plain",
+                                       "la_plata_lowland", "gobi", "kalahari"])
+def test_new_plains_and_deserts_are_big_enough(regions, region_id):
+    assert regions[region_id].faces.sum() >= 15
 
 
 @pytest.mark.parametrize("point,region_id,base", NEW_OBJECTS)

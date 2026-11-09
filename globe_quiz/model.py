@@ -88,7 +88,12 @@ def classify(latlon: np.ndarray, vertex_heights: np.ndarray, coloring: dict) -> 
     water = (vertex_heights <= 0).all(axis=1)
     lat = latlon[:, 0]
     ice = ~water & ((lat < ANTARCTIC_LAT) | (lat > ARCTIC_CAP_LAT) | _in_any(latlon, [coloring["greenland"]]))
-    desert = ~water & ~ice & (h < DESERT_MAX_HEIGHT) & _in_any(latlon, [d["polygon"] for d in coloring["deserts"]])
+    # Песок — ниже порога высоты: общего DESERT_MAX_HEIGHT или своего у контура
+    # (Гоби и Калахари на модели высокие — иначе они вышли бы горами).
+    desert = np.zeros(len(h), bool)
+    for d in coloring["deserts"]:
+        desert |= (h < d.get("max_height", DESERT_MAX_HEIGHT)) & _in_any(latlon, [d["polygon"]])
+    desert &= ~water & ~ice
 
     surface = np.full(len(h), SURFACE_LAND, np.int8)
     surface[water] = SURFACE_WATER

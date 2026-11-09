@@ -97,7 +97,8 @@ LEVEL_OBJECTS = {
     "mountains": {"alps", "caucasus", "ural_mountains", "scandinavian_mountains", "atlas", "pyrenees",
                   "himalayas", "pamir", "altai", "tibetan_plateau", "ethiopian_highlands", "andes",
                   "cordillera", "great_dividing_range", "brazilian_highlands"},
-    "plains_deserts": {"east_european_plain", "west_siberian_plain", "amazon_lowland", "sahara",
+    "plains_deserts": {"east_european_plain", "west_siberian_plain", "north_china_plain", "indo_gangetic_plain",
+                       "great_plains", "amazon_lowland", "la_plata_lowland", "sahara", "gobi", "kalahari",
                        "australian_deserts", "antarctic_ice_sheet"},
     "peaks": {"everest", "kilimanjaro", "elbrus", "mont_blanc", "aconcagua", "denali"},
 }

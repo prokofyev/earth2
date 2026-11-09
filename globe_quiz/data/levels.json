@@ -143,8 +143,14 @@
    "questions": [
     {"text": "Найди Восточно-Европейскую равнину", "accept": ["east_european_plain"]},
     {"text": "Найди Западно-Сибирскую равнину", "accept": ["west_siberian_plain"]},
+    {"text": "Найди Великую Китайскую равнину", "accept": ["north_china_plain"]},
+    {"text": "Найди Индо-Гангскую равнину", "accept": ["indo_gangetic_plain"]},
+    {"text": "Найди Великие равнины", "accept": ["great_plains"]},
     {"text": "Найди Амазонскую низменность", "accept": ["amazon_lowland"]},
+    {"text": "Найди Ла-Платскую низменность", "accept": ["la_plata_lowland"]},
     {"text": "Найди пустыню Сахара", "accept": ["sahara"]},
+    {"text": "Найди пустыню Гоби", "accept": ["gobi"]},
+    {"text": "Найди пустыню Калахари", "accept": ["kalahari"]},
     {"text": "Найди пустыни Австралии", "accept": ["australian_deserts"]},
     {"text": "Найди ледяной щит Антарктиды", "accept": ["antarctic_ice_sheet"]}
    ]

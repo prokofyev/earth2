@@ -97,3 +97,33 @@ def test_peak_regions_match_converter():
     regions = {r["id"]: r for r in json.loads((DATA_DIR / "regions.json").read_text(encoding="utf-8"))["regions"]}
     for pid, lat, lon, _ in PEAKS:
         assert regions[pid]["at"] == [lat, lon]
+
+
+def test_desert_contour_own_height_limit():
+    from globe_quiz.model import classify
+
+    latlon = np.array([[10.0, 10.0], [10.0, 10.0]])
+    vh = np.array([[9.0, 9.0, 9.0], [9.0, 9.0, 9.0]])
+    square = [[0, 0], [0, 20], [20, 20], [20, 0]]
+    base = {"greenland": [[89, 0], [89, 1], [88, 1]]}
+    _, colors = classify(latlon, vh, {**base, "deserts": [{"polygon": square, "max_height": 11}]})
+    assert tuple(colors[0]) == SAND_COLOR  # свой порог 11 — высота 9 ещё песок
+    _, colors = classify(latlon, vh, {**base, "deserts": [{"polygon": square}]})
+    assert tuple(colors[0]) != SAND_COLOR  # общий порог 6 — уже горы
+
+
+@pytest.mark.parametrize("lat, lon", [(43, 105), (44, 100), (-23, 22), (-25, 23), (-20, 21)])
+def test_gobi_and_kalahari_are_sandy(earth, lat, lon):
+    assert tuple(earth.colors[face_at(earth, lat, lon)]) == SAND_COLOR
+
+
+def test_saharan_mountains_stay_mountains(earth):
+    # Горы в Сахаре и Аравии выше общего порога песка — по-прежнему горы, а не песок.
+    import json
+
+    from globe_quiz.model import COLORING_PATH, DESERT_MAX_HEIGHT, _in_any
+
+    old = [d["polygon"] for d in json.loads(COLORING_PATH.read_text(encoding="utf-8"))["deserts"]
+           if "max_height" not in d]
+    high = _in_any(earth.latlon, old) & (earth.height >= DESERT_MAX_HEIGHT) & ~earth.is_water
+    assert high.any() and not (earth.colors[high] == SAND_COLOR).all(axis=1).any()
