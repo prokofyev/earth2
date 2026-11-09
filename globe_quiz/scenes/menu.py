@@ -10,6 +10,17 @@ from ..ui import (ACCENT, BAD, PANEL, PANEL_EDGE, STAR_EMPTY, TEXT, TEXT_DIM, Bu
                   draw_panel, draw_star, draw_text, ui_scale)
 
 
+def lock_place(card: pygame.Rect, title: pygame.Rect, s: float) -> tuple[tuple[int, int], int]:
+    """Центр и высота замочка: посередине свободного места под названием карточки.
+
+    Высота — 46·s, но в тесной карточке (маленькое окно) замок уменьшается,
+    чтобы не наезжать на название и край.
+    """
+    free = card.bottom - title.bottom
+    height = max(12, min(int(46 * s), free - int(16 * s)))
+    return (card.centerx, title.bottom + free // 2), height
+
+
 class MenuScene(Scene):
     def enter(self) -> None:
         self.cards: list[tuple[pygame.Rect, object]] = []
@@ -106,8 +117,8 @@ class MenuScene(Scene):
             title_col = TEXT if unlocked else TEXT_DIM
             draw_text(surf, f"{level.id}", int(46 * s), ACCENT if unlocked else TEXT_DIM,
                       (rect.left + int(30 * s), rect.top + int(32 * s)))
-            draw_text(surf, level.title, int(36 * s), title_col,
-                      (rect.centerx, rect.top + int(rect.height * 0.42)), width=rect.width - int(30 * s))
+            title_rect = draw_text(surf, level.title, int(36 * s), title_col,
+                                   (rect.centerx, rect.top + int(rect.height * 0.42)), width=rect.width - int(30 * s))
             if unlocked:
                 best = progress.best_for(level.id)
                 max_stars = 3 * min(MAX_QUESTIONS, len(level.questions))
@@ -120,7 +131,7 @@ class MenuScene(Scene):
                 draw_text(surf, f"{best} из {max_stars}", int(24 * s), TEXT_DIM,
                           (rect.centerx, rect.bottom - int(18 * s)))
             else:
-                draw_lock(surf, (rect.centerx, rect.bottom - int(52 * s)), int(36 * s))
+                draw_lock(surf, *lock_place(rect, title_rect, s))
         if self.message_t > 0:
             draw_text(surf, self.message, int(32 * s), BAD, (w // 2, h - int(45 * s)), width=w - 40)
         else:

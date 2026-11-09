@@ -385,3 +385,31 @@ def test_menu_fits_eight_cards(app, size):
     assert all(win.contains(r) for r in rects)  # ни одна не обрезана
     assert not any(a.colliderect(b) for i, a in enumerate(rects) for b in rects[i + 1:])
     assert [lv.title for _, lv in app.scene.cards][-2:] == ["Вершины и вулканы", "Загадки"]
+
+
+@pytest.mark.parametrize("size", [(1024, 768), (1792, 982), (800, 600)])
+def test_locked_cards_show_lock_below_title(app, size):
+    from globe_quiz.scenes.menu import lock_place
+    from globe_quiz.ui import LOCK_HOLE, LOCK_LINE, draw_text, lock_image
+
+    surf = pygame.display.set_mode(size)
+    try:
+        app.switch(MenuScene(app))
+        app.scene.layout(size)
+        s = app.scene.s
+        app.scene.draw(surf)
+        px = pygame.surfarray.array3d(surf)
+        scratch = pygame.Surface(size)
+        locked = [(r, lv) for r, lv in app.scene.cards if not app.progress.is_unlocked(lv.id)]
+        assert len(locked) == 7
+        for rect, level in locked:
+            title = draw_text(scratch, level.title, int(36 * s), (255, 255, 255),
+                              (rect.centerx, rect.top + int(rect.height * 0.42)), width=rect.width - int(30 * s))
+            center, height = lock_place(rect, title, s)
+            lock = lock_image(height).get_rect(center=center)
+            assert rect.contains(lock) and not lock.colliderect(title), level.title
+            area = px[lock.left:lock.right, lock.top:lock.bottom].reshape(-1, 3).astype(int)
+            assert (abs(area - LOCK_HOLE).max(axis=1) < 12).any()  # тёмная скважина
+            assert (abs(area - LOCK_LINE).max(axis=1) < 12).any()  # светлый контур
+    finally:
+        pygame.display.set_mode((800, 600))

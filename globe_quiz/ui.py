@@ -102,14 +102,69 @@ def draw_star(surf, center, r, color=STAR, outline=(150, 100, 0)):
         pygame.draw.polygon(surf, outline, pts, max(1, int(r / 8)))
 
 
-def draw_lock(surf, center, size, color=TEXT_DIM):
-    cx, cy = center
-    w, h = size, size * 0.75
-    body = pygame.Rect(0, 0, w, h)
-    body.midtop = (cx, cy - h * 0.15)
-    pygame.draw.arc(surf, color, pygame.Rect(cx - w * 0.33, cy - h * 0.95, w * 0.66, h * 1.4),
-                    0, math.pi, max(2, int(size / 8)))
-    pygame.draw.rect(surf, color, body, border_radius=int(size / 8))
+# Замочек закрытого уровня — по форме образца assets/lock.jpg. Размеры в единицах
+# образца: контур 684 × 879, толщина линии 31.
+LOCK_LINE = (196, 204, 240)  # контур — светлее TEXT_DIM, чтобы тонкие линии читались
+LOCK_FILL = (150, 160, 215, 70)  # корпус слегка залит, карточка видна сквозь него
+LOCK_HOLE = (18, 24, 60)  # скважина — темнее карточки, как отверстие
+_LOCK_W, _LOCK_H, _LOCK_T = 684, 879, 31
+_LOCK_SS = 4  # рисуем крупнее и сглаженно уменьшаем
+_lock_cache: dict[tuple, pygame.Surface] = {}
+
+
+def lock_image(height: int, color=LOCK_LINE) -> pygame.Surface:
+    """Готовая картинка замочка заданной высоты (прозрачный фон), из кеша."""
+    height = max(8, int(height))
+    key = (height, tuple(color))
+    img = _lock_cache.get(key)
+    if img is not None:
+        return img
+    u = height * _LOCK_SS / _LOCK_H  # пикселей на единицу образца
+    t = max(_LOCK_T, 1.2 * _LOCK_H / height)  # на маленьком замке линия не тоньше ~1,2 пикселя
+
+    def r(x, y, w, h):
+        return pygame.Rect(round(x * u), round(y * u), max(1, round(w * u)), max(1, round(h * u)))
+
+    big = pygame.Surface((round(_LOCK_W * u), round(_LOCK_H * u)), pygame.SRCALPHA)
+    big.fill((*color, 0))
+    clear = (*color, 0)  # прозрачное, но цвета линии: при уменьшении край без тёмной каймы
+    line = (*color, 255)
+    body_top = 358
+    # Дужка: петля, обведённая контуром снаружи и изнутри.
+    ox, ow, otop = 98, 487, 0  # внешний край петли
+    ix, iw, itop = 195, 293, 97  # внутренний просвет
+    leg = body_top + _LOCK_T - otop  # ножки заходят в корпус
+    for (x, y, w, h), fill in (
+        ((ox, otop, ow, leg), line),
+        ((ox + t, otop + t, ow - 2 * t, leg), clear),
+        ((ix - t, itop - t, iw + 2 * t, leg), line),
+        ((ix, itop, iw, leg), clear),
+    ):
+        rect = r(x, y, w, h)
+        pygame.draw.rect(big, fill, rect, border_top_left_radius=rect.width // 2,
+                         border_top_right_radius=rect.width // 2)
+    # Корпус со скруглёнными углами, слегка залитый.
+    pygame.draw.rect(big, clear, r(0, body_top, _LOCK_W, _LOCK_H - body_top))
+    pygame.draw.rect(big, line, r(0, body_top, _LOCK_W, _LOCK_H - body_top), border_radius=round(90 * u))
+    pygame.draw.rect(big, LOCK_FILL, r(t, body_top + t, _LOCK_W - 2 * t, _LOCK_H - body_top - 2 * t),
+                     border_radius=round(max(1, 90 - t) * u))
+    # Скважина: кружок с прорезью, внутри тёмная.
+    cx, cy, rad = 342, 569, 81
+    sx, sw, sbottom = 293, 97, 748
+    for inset, fill in ((0, line), (t, (*LOCK_HOLE, 255))):
+        pygame.draw.circle(big, fill, (round(cx * u), round(cy * u)), round((rad - inset) * u))
+        slot = r(sx + inset, cy, sw - 2 * inset, sbottom - inset - cy)
+        pygame.draw.rect(big, fill, slot, border_bottom_left_radius=slot.width // 2,
+                         border_bottom_right_radius=slot.width // 2)
+    img = pygame.transform.smoothscale(big, (max(1, round(_LOCK_W * height / _LOCK_H)), height))
+    _lock_cache[key] = img
+    return img
+
+
+def draw_lock(surf, center, size, color=LOCK_LINE):
+    """Замочек высотой size с центром в center."""
+    img = lock_image(size, color)
+    surf.blit(img, img.get_rect(center=(round(center[0]), round(center[1]))))
 
 
 def draw_panel(surf, rect, color=PANEL, edge=PANEL_EDGE, alpha=235, radius=18):
