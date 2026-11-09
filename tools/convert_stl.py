@@ -7,6 +7,7 @@
 Шаги:
   1. сфера уровня моря, сварка вершин;
   2. срезанный подставкой юг поднимается на гладкий ледяной купол;
+     на месте шести знаменитых вершин поднимаются снежные пики (их нет в модели);
   3. упрощение схлопыванием рёбер с наименьшей квадратичной ошибкой (QEM):
      грани остаются там, где форма сложная, — вдоль берегов-обрывов и хребтов,
      а ровный океан и плоскогорья собираются в крупные грани;
@@ -30,6 +31,7 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
 from globe_quiz import ASSETS_DIR  # noqa: E402
+from globe_quiz.geo import latlon_to_vec  # noqa: E402
 
 STL_PATH = ASSETS_DIR / "World-Full-Final.STL"
 OUT_PATH = ASSETS_DIR / "earth_relief.npz"
@@ -39,6 +41,24 @@ SEA_EPS = 0.15  # выше этого (в единицах STL) — суша
 DOME_RISE = 2.4  # насколько купол у Южного полюса выше плоскости среза подставки
 FACE_BUDGET = 12000  # больше — меньше 30 кадров в секунду в развёрнутом окне
 MAX_FLIP_COS = 0.2  # схлопывание не должно поворачивать грань больше чем на ~78°
+
+# Знаменитые вершины: id региона, настоящие широта и долгота, высота в метрах.
+# В исходной модели на их местах нет выделенных гор — пики поднимаются при переводе.
+PEAKS = [
+    ("everest", 27.99, 86.93, 8849),
+    ("aconcagua", -32.65, -70.01, 6961),
+    ("denali", 63.07, -151.01, 6190),
+    ("kilimanjaro", -3.07, 37.35, 5895),
+    ("elbrus", 43.35, 42.44, 5642),
+    ("mont_blanc", 45.83, 6.86, 4808),
+]
+PEAK_RADIUS_DEG = 3.0  # радиус основания пика
+# Профиль пика (1 − t²)²: округлая макушка и крутые склоны.
+# Пик лишь немного выше всего вокруг: высокий пик (выше Тибета) на таком основании
+# выглядит иглой, торчащей за край глобуса.
+PEAK_LOCAL_DEG = 3.0  # пик выше всего в этом радиусе…
+PEAK_MARGIN_LOW = 1.5  # …на столько у самой низкой вершины (Монблан)…
+PEAK_MARGIN_HIGH = 3.0  # …и на столько у самой высокой (Эверест), остальные — по настоящей высоте
 
 
 # --- 1. Чтение STL, уровень моря, сварка ---------------------------------------
@@ -128,6 +148,69 @@ def raise_south_cut(verts: np.ndarray, plane_z: float, rise: float = DOME_RISE,
     return out
 
 
+def game_to_stl(points: np.ndarray, lon_offset: float = LON_OFFSET) -> np.ndarray:
+    """Обратно к stl_to_game (центр Земли в нуле)."""
+    g = np.asarray(points, float)
+    a = math.radians(lon_offset)
+    x, y = g[..., 0], -g[..., 2]
+    px = x * math.cos(a) + y * math.sin(a)
+    py = -x * math.sin(a) + y * math.cos(a)
+    return np.stack([px, py, g[..., 1]], axis=-1)
+
+
+def _angles_deg(verts: np.ndarray, direction: np.ndarray) -> np.ndarray:
+    """Угол между направлением на вершины (STL, центр в нуле) и direction, градусы."""
+    unit = verts / np.linalg.norm(verts, axis=1)[:, None]
+    return np.degrees(np.arccos(np.clip(unit @ direction, -1.0, 1.0)))
+
+
+def peak_heights(verts: np.ndarray, sea: float, peaks=PEAKS, lon_offset: float = LON_OFFSET) -> list[float]:
+    """Высоты пиков (в единицах STL): местный максимум в радиусе PEAK_LOCAL_DEG плюс запас.
+
+    Запас растёт с настоящей высотой вершины: от PEAK_MARGIN_LOW у Монблана
+    до PEAK_MARGIN_HIGH у Эвереста.
+    """
+    h = np.linalg.norm(verts, axis=1) - sea
+    top = max(z for *_, z in peaks)
+    low = min(z for *_, z in peaks)
+    out = []
+    for _, lat, lon, z in peaks:
+        d = _angles_deg(verts, game_to_stl(latlon_to_vec(lat, lon), lon_offset))
+        local = float(h[d < PEAK_LOCAL_DEG].max(initial=0.0))
+        k = (z - low) / (top - low) if top > low else 1.0
+        out.append(local + PEAK_MARGIN_LOW + k * (PEAK_MARGIN_HIGH - PEAK_MARGIN_LOW))
+    return out
+
+
+def raise_peaks(verts: np.ndarray, sea: float, peaks: list[tuple[float, float, float]],
+                lon_offset: float = LON_OFFSET, radius_deg: float = PEAK_RADIUS_DEG) -> tuple[np.ndarray, list[int]]:
+    """Поднимает пики (широта, долгота, высота над морем) — только по радиусу и только вверх.
+
+    Поднимается только суша: вершины океана у берега остаются на уровне моря,
+    чтобы пик не насыпал сушу в море.
+
+    Новый радиус вершины: max(r, sea + H·(1 − (d/ρ)²)²), где d — угол до пика.
+    Ближайшая к пику вершина становится макушкой ровно в его точке. Возвращает
+    новые вершины и номера макушек (их нельзя трогать при упрощении).
+    """
+    out = verts.copy()
+    r = np.linalg.norm(out, axis=1)
+    unit = out / r[:, None]
+    land = r - sea > SEA_EPS
+    apexes = []
+    for lat, lon, height in peaks:
+        direction = game_to_stl(latlon_to_vec(lat, lon), lon_offset)
+        d = _angles_deg(out, direction)
+        t = np.clip(d / radius_deg, 0.0, 1.0)
+        cone = sea + height * (1.0 - t * t) ** 2
+        r = np.maximum(r, np.where((d < radius_deg) & land, cone, 0.0))
+        apex = int(np.argmin(d))
+        unit[apex] = direction
+        r[apex] = max(r[apex], sea + height)
+        apexes.append(apex)
+    return unit * r[:, None], apexes
+
+
 # --- 3. Упрощение (quadric error metrics) ---------------------------------------
 
 
@@ -155,10 +238,11 @@ def _normal(a, b, c):
     return (uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx)
 
 
-def decimate(verts: np.ndarray, faces: np.ndarray, target_faces: int, verbose: bool = False):
+def decimate(verts: np.ndarray, faces: np.ndarray, target_faces: int, verbose: bool = False,
+             fixed: list[int] | tuple[int, ...] = ()):
     """Схлопывает рёбра с наименьшей ошибкой, пока граней больше target_faces.
 
-    Не схлопывает: вершины на краях и неманифолдных рёбрах; рёбра, после которых
+    Не схлопывает: вершины fixed (макушки пиков), вершины на краях и неманифолдных рёбрах; рёбра, после которых
     сетка перестала бы быть многообразием (условие связи); схлопывания, которые
     сильно поворачивают или вырождают соседние грани.
     """
@@ -179,6 +263,8 @@ def decimate(verts: np.ndarray, faces: np.ndarray, target_faces: int, verbose: b
     for (a, b), c in counts.items():
         if c != 2:
             locked[a] = locked[b] = True
+    for v in fixed:
+        locked[v] = True
     version = [0] * len(pos)
     removed = [False] * len(pos)
 
@@ -287,9 +373,15 @@ def convert(stl_path: Path = STL_PATH, out_path: Path = OUT_PATH, lon_offset: fl
     verts, faces = weld(tris)
     verts = verts - center
     verts = raise_south_cut(verts, float(tris[:, :, 2].min() - center[2]))
+    heights = peak_heights(verts, sea, PEAKS, lon_offset)
+    verts, apexes = raise_peaks(verts, sea, [(lat, lon, h) for (_, lat, lon, _), h in zip(PEAKS, heights)],
+                                lon_offset)
     if verbose:
+        print("пики:", ", ".join(f"{pid} {h:.1f}" for (pid, *_), h in zip(PEAKS, heights)))
         print(f"сетка STL: {len(verts)} вершин, {len(faces)} граней; упрощаем до {budget}…")
-    verts, faces = decimate(verts, faces, budget, verbose=verbose)
+    apex_points = verts[apexes]
+    verts, faces = decimate(verts, faces, budget, verbose=verbose, fixed=apexes)
+    peak_vertices = [int(np.argmin(np.linalg.norm(verts - p, axis=1))) for p in apex_points]
     game = stl_to_game(verts, np.zeros(3), lon_offset)
     r = np.linalg.norm(game, axis=1)
     h = r - sea
@@ -304,6 +396,7 @@ def convert(stl_path: Path = STL_PATH, out_path: Path = OUT_PATH, lon_offset: fl
         stl_sea_radius=np.float64(sea),
         lon_offset=np.float64(lon_offset),
         source_sha256=np.array(sha256(stl_path)),
+        peak_vertices=np.array(peak_vertices, np.int32),  # макушки PEAKS по порядку
     )
     np.savez_compressed(out_path, **data)
     if verbose:

@@ -113,6 +113,11 @@ def load_earth(path: Path = MODEL_PATH, coloring_path: Path = COLORING_PATH) -> 
     latlon = vec_to_latlon(centers)
     coloring = json.loads(Path(coloring_path).read_text(encoding="utf-8"))
     surface, colors = classify(latlon, vh, coloring)
+    # Снежные шапки знаменитых вершин: грани, сходящиеся в макушке пика, — белые.
+    # По средней высоте они могли бы выйти коричневыми: соседние вершины ниже.
+    if "peak_vertices" in data:
+        cap = np.isin(faces, data["peak_vertices"]).any(axis=1) & (surface == SURFACE_LAND)
+        colors[cap] = HEIGHT_BANDS[-1][1]
     return EarthModel(
         tris=tris,
         normals=normals,

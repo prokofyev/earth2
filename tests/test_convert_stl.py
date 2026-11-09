@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from globe_quiz.geo import vec_to_latlon
+from globe_quiz.geo import latlon_to_vec, vec_to_latlon
 from tools import convert_stl as cs
 
 from .conftest import face_at
@@ -205,3 +205,76 @@ def test_conversion_is_reproducible(npz, tmp_path):
     again = cs.convert(out_path=tmp_path / "again.npz", verbose=False)
     for key in ("vertices", "faces", "heights"):
         assert np.array_equal(again[key], npz[key])
+
+
+# --- Пики ------------------------------------------------------------------------
+
+
+def _ball_at(lat, lon, level=5, radius=10.0):
+    """Сфера радиуса 10 в координатах STL и направление на точку (lat, lon)."""
+    v, f = _icosphere(level)
+    direction = cs.game_to_stl(latlon_to_vec(lat, lon))
+    return v * radius, f, direction
+
+
+def test_game_to_stl_inverts_stl_to_game():
+    p = np.array([[1.0, 2.0, 3.0], [-4.0, 0.5, 2.0]])
+    assert np.allclose(cs.game_to_stl(cs.stl_to_game(p, np.zeros(3))), p)
+
+
+def test_raise_peaks_cone_only_up():
+    v, f, direction = _ball_at(28.0, 87.0)
+    v = v * 1.05  # вся сфера — суша (на 0,5 выше «моря» радиуса 10)
+    raised, apexes = cs.raise_peaks(v, 10.0, [(28.0, 87.0, 3.0)])
+    r0, r1 = np.linalg.norm(v, axis=1), np.linalg.norm(raised, axis=1)
+    apex = apexes[0]
+    assert r1[apex] == pytest.approx(13.0)
+    assert np.allclose(raised[apex] / r1[apex], direction)  # макушка ровно в точке пика
+    d = np.degrees(np.arccos(np.clip((v / r0[:, None]) @ direction, -1, 1)))
+    far = d > cs.PEAK_RADIUS_DEG + 0.01
+    assert np.allclose(raised[far], v[far])  # дальше основания ничего не меняется
+    assert (r1 >= r0 - 1e-9).all()  # рельеф не опускается
+    near = (d < cs.PEAK_RADIUS_DEG) & (np.arange(len(v)) != apex)
+    assert near.any() and (r1[near] < 13.0).all()  # склоны ниже макушки
+
+
+def test_raise_peaks_leaves_sea_alone():
+    v, f, direction = _ball_at(28.0, 87.0)  # сфера радиуса 10 = уровень моря: всё вода
+    raised, apexes = cs.raise_peaks(v, 10.0, [(28.0, 87.0, 3.0)])
+    others = np.arange(len(v)) != apexes[0]
+    assert np.allclose(raised[others], v[others])  # пик не насыпает сушу в море
+
+
+def test_peak_heights_just_above_surroundings():
+    v, f, direction = _ball_at(28.0, 87.0)
+    v = v.copy()
+    d = np.degrees(np.arccos(np.clip((v / 10) @ direction, -1, 1)))
+    v[np.argmin(np.abs(d - 2.0))] *= (10 + 9.0) / 10  # гора высотой 9 в 2° от Эвереста
+    v[np.argmax(d)] *= (10 + 16.9) / 10  # высокое плато далеко — не в счёт
+    heights = dict(zip([p[0] for p in cs.PEAKS], cs.peak_heights(v, 10.0)))
+    assert heights["everest"] == pytest.approx(9.0 + cs.PEAK_MARGIN_HIGH)
+    assert heights["mont_blanc"] == pytest.approx(cs.PEAK_MARGIN_LOW)  # вокруг ровное «море»
+    margins = [h - (9.0 if pid == "everest" else 0.0) for pid, h in heights.items()]
+    assert margins == sorted(margins, reverse=True)  # запас растёт с настоящей высотой
+
+
+def test_decimate_keeps_fixed_apex():
+    v, f, _ = _ball_at(30.0, 40.0, level=5)
+    raised, apexes = cs.raise_peaks(v * 1.05, 10.0, [(30.0, 40.0, 3.0)])
+    apex_pos = raised[apexes[0]]
+    dv, df = cs.decimate(raised, f, len(f) // 10, fixed=apexes)
+    assert np.isclose(dv, apex_pos).all(axis=1).any()  # макушка осталась на месте
+    assert (_edge_hist(df) == 2).all()
+
+
+def test_npz_peak_vertices_on_peaks(npz):
+    v = npz["vertices"].astype(float)
+    pv = npz["peak_vertices"]
+    assert len(pv) == len(cs.PEAKS)
+    for k, (_, lat, lon, _) in zip(pv, cs.PEAKS):
+        assert np.allclose(vec_to_latlon(v[k]), [lat, lon], atol=0.01)
+    r = np.linalg.norm(v, axis=1)
+    u = v / r[:, None]
+    for k in pv:  # макушка — самая высокая точка в радиусе 3°
+        near = np.degrees(np.arccos(np.clip(u @ u[k], -1, 1))) < 3.0
+        assert r[k] == r[near].max()

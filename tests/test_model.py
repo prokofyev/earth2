@@ -62,3 +62,38 @@ def test_colors_by_height_and_place(earth):
     assert (earth.colors[tibet] == snow).all(axis=1).any()  # белые вершины Тибета
     andes = (abs(earth.latlon[:, 0] + 20) < 10) & (abs(earth.latlon[:, 1] + 68) < 5)
     assert (earth.height[andes] > 6).any()  # Анды — горы
+
+
+# --- Знаменитые вершины, поднятые при переводе модели ---------------------------
+
+
+def _vertex_heights(earth):
+    """Радиусы всех вершин модели и их направления (единичные)."""
+    v = earth.tris.reshape(-1, 3)
+    r = np.linalg.norm(v, axis=1)
+    return r, v / r[:, None]
+
+
+@pytest.mark.parametrize("peak", ["everest", "aconcagua", "denali", "kilimanjaro", "elbrus", "mont_blanc"])
+def test_peak_is_highest_around_and_snowy(earth, peak):
+    from globe_quiz.geo import latlon_to_vec
+    from tools.convert_stl import PEAKS
+
+    _, lat, lon, _ = next(p for p in PEAKS if p[0] == peak)
+    r, u = _vertex_heights(earth)
+    d = np.degrees(np.arccos(np.clip(u @ latlon_to_vec(lat, lon), -1, 1)))
+    around = np.nonzero(d < 3.0)[0]
+    top = around[np.argmax(r[around])]
+    assert d[top] < 0.05  # самая высокая точка в 3° — макушка ровно на месте вершины
+    assert tuple(earth.colors[face_at(earth, lat, lon)]) == HEIGHT_BANDS[-1][1]  # верхушка белая
+
+
+def test_peak_regions_match_converter():
+    import json
+
+    from globe_quiz import DATA_DIR
+    from tools.convert_stl import PEAKS
+
+    regions = {r["id"]: r for r in json.loads((DATA_DIR / "regions.json").read_text(encoding="utf-8"))["regions"]}
+    for pid, lat, lon, _ in PEAKS:
+        assert regions[pid]["at"] == [lat, lon]

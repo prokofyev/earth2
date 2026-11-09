@@ -115,7 +115,7 @@ def test_credits_from_model():
     assert c["license"] == "CC BY-NC 4.0"
     assert c["license_url"] == "https://creativecommons.org/licenses/by-nc/4.0/"
     assert c["source"] == "https://www.thingiverse.com/thing:671647"
-    assert c["changes"] == "Модель упрощена и раскрашена для игры"
+    assert c["changes"] == "Модель упрощена, раскрашена и дополнена вершинами для игры"
 
 
 def test_full_flow_level_one(app, tmp_path):
@@ -425,7 +425,7 @@ def test_splash_hides_long_source_address(app):
 def test_splash_notes_model_changes(app):
     frame(app)
     lines = ["".join(t for t, _ in line) for line in app.scene.credit_lines]
-    assert lines[-1] == "Модель упрощена и раскрашена для игры"
+    assert lines[-1] == "Модель упрощена, раскрашена и дополнена вершинами для игры"
     assert len(lines) == 3  # под строками об авторе и лицензии
 
 
