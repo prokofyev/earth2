@@ -174,6 +174,13 @@ def draw_panel(surf, rect, color=PANEL, edge=PANEL_EDGE, alpha=235, radius=18):
     surf.blit(panel, rect.topleft)
 
 
+# Надпись «имя ★ число» на кнопке игрока: размеры в долях размера шрифта.
+STAR_GAP = 0.4  # между именем и звездой
+STAR_SIZE = 0.62  # поперечник звезды
+NUMBER_GAP = 0.15  # между звездой и числом
+BUTTON_PAD = 0.65  # поля кнопки слева и справа вместе
+
+
 @dataclass
 class Button:
     text: str
@@ -182,6 +189,7 @@ class Button:
     hover_color: tuple = BUTTON_HOVER
     enabled: bool = True
     visible: bool = True
+    stars: int | None = None  # если задано — после текста звезда и это число (кнопка игрока)
     _pressed: bool = False
 
     def handle(self, event) -> bool:
@@ -213,7 +221,38 @@ class Button:
         pygame.draw.rect(surf, color, self.rect, border_radius=radius)
         pygame.draw.rect(surf, (255, 255, 255), self.rect, 2, border_radius=radius)
         size = text_size or int(self.rect.height * 0.5)
-        draw_text(surf, self.text, size, TEXT, self.rect.center)
+        if self.stars is None:
+            draw_text(surf, self.text, size, TEXT, self.rect.center)
+            return
+        size = self.fit_size(size)
+        fnt = font(size)
+        x = self.rect.centerx - self.content_width(size) // 2
+        cy = self.rect.centery
+        name = fnt.render(self.text, True, TEXT)
+        surf.blit(name, name.get_rect(midleft=(x, cy)))
+        star_r = int(size * STAR_SIZE) // 2
+        x += name.get_width() + int(size * STAR_GAP)
+        draw_star(surf, (x + star_r, cy), star_r)
+        x += 2 * star_r + int(size * NUMBER_GAP)
+        number = fnt.render(str(self.stars), True, TEXT)
+        surf.blit(number, number.get_rect(midleft=(x, cy)))
+
+    def content_width(self, size: int) -> int:
+        """Ширина надписи кнопки: имя, а при заданных звёздах — ещё звезда и число."""
+        fnt = font(size)
+        width = fnt.size(self.text)[0]
+        if self.stars is not None:
+            width += (int(size * STAR_GAP) + 2 * (int(size * STAR_SIZE) // 2) + int(size * NUMBER_GAP)
+                      + fnt.size(str(self.stars))[0])
+        return width
+
+    def fit_size(self, size: int) -> int:
+        """Размер текста, при котором надпись влезает в кнопку с полями; не меньше 60 % исходного."""
+        limit = self.rect.width - int(size * BUTTON_PAD)
+        fitted = size
+        while fitted > size * 0.6 and self.content_width(fitted) > limit:
+            fitted -= 1
+        return fitted
 
 
 # Кнопка «назад» в левом верхнем углу — одна на всех экранах; Esc делает то же самое.

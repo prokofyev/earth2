@@ -54,7 +54,8 @@ class PlayersScene(Scene):
             in_row = min(cols, len(names) - r * cols)
             x0 = (w - (in_row * bw + (in_row - 1) * gap)) // 2
             current = name == self.app.players.current
-            btn = Button(name, color=(70, 110, 220) if current else BUTTON)
+            stars = self.app.players.players[name].total_stars(lv.key for lv in self.app.levels)
+            btn = Button(name, color=(70, 110, 220) if current else BUTTON, stars=stars)
             btn.rect = pygame.Rect(x0 + c * (bw + gap), top + r * (bh + gap), bw, bh)
             self.player_buttons.append(btn)
         rows = (len(names) + cols - 1) // cols

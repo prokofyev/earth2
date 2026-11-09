@@ -1,4 +1,7 @@
-"""Итог уровня: звёзды, салют при прохождении, «Ещё раз» и «В меню»."""
+"""Итог уровня: звёзды, салют при прохождении, «Ещё раз» и «В меню».
+
+Пробел и Enter — главная (левая) кнопка, Esc — «В меню».
+"""
 
 from __future__ import annotations
 
@@ -8,6 +11,11 @@ from ..app import Scene
 from ..fx import Fireworks
 from ..quiz import PASS_RATIO, next_level
 from ..ui import ACCENT, GOOD, TEXT, TEXT_DIM, Button, draw_star, draw_text, ui_scale
+
+# Уровень заканчивают тем же пробелом или Enter («Дальше»). Первые полсекунды итог
+# эти клавиши не принимает, чтобы лишнее нажатие не пролистало звёзды и салют.
+RESULT_KEY_DELAY = 0.5
+MAIN_KEYS = (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER)
 
 
 class ResultScene(Scene):
@@ -32,6 +40,7 @@ class ResultScene(Scene):
         self.btn_main = Button("Следующий уровень" if self.next_level else "Ещё раз")
         self.btn_menu = Button("В меню")
         self.fireworks: Fireworks | None = None
+        self.age = 0.0  # сколько секунд итог на экране
 
     def layout(self, size) -> None:
         w, h = size
@@ -49,8 +58,9 @@ class ResultScene(Scene):
     def handle(self, event) -> None:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self._menu()
-        elif event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-            self._main()
+        elif event.type == pygame.KEYDOWN and event.key in MAIN_KEYS:
+            if self.age >= RESULT_KEY_DELAY:
+                self._main()
         elif self.btn_main.handle(event):
             self._main()
         elif self.btn_menu.handle(event):
@@ -67,6 +77,7 @@ class ResultScene(Scene):
         self.app.switch(MenuScene(self.app))
 
     def update(self, dt) -> None:
+        self.age += dt
         if self.fireworks is not None:
             self.fireworks.update(dt)
 

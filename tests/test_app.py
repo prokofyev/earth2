@@ -250,6 +250,56 @@ def test_after_peaks_next_is_riddles(app):
     assert isinstance(app.scene, LevelScene) and app.scene.level.title == "Загадки"
 
 
+def wait(app, seconds, dt=0.1):
+    for _ in range(round(seconds / dt)):
+        frame(app, dt=dt)
+
+
+def test_space_on_passed_result_opens_next_level(app):
+    result = _finish_level(app, app.levels[1])  # «Океаны»
+    assert result.passed
+    wait(app, 0.6)
+    press(app, pygame.K_SPACE)
+    assert isinstance(app.scene, LevelScene) and app.scene.level is app.levels[2]
+
+
+def test_space_on_failed_result_restarts_level(app):
+    result = _finish_level(app, app.levels[1], perfect=False)
+    assert not result.passed
+    wait(app, 0.6)
+    press(app, pygame.K_SPACE)
+    scene = app.scene
+    assert isinstance(scene, LevelScene) and scene.level is app.levels[1]
+    assert scene.run.index == 0 and scene.run.total_stars == 0
+
+
+def test_space_after_last_level_restarts_it(app):
+    result = _finish_level(app, app.levels[-1])
+    assert result.passed
+    wait(app, 0.6)
+    press(app, pygame.K_SPACE)
+    assert isinstance(app.scene, LevelScene) and app.scene.level is app.levels[-1]
+
+
+@pytest.mark.parametrize("key", [pygame.K_SPACE, pygame.K_RETURN])
+def test_extra_key_press_does_not_skip_result(app, key):
+    result = _finish_level(app, app.levels[1])
+    press(app, key)  # сразу после «Дальше»
+    assert app.scene is result
+    wait(app, 0.3)
+    press(app, key)  # прошло меньше полсекунды
+    assert app.scene is result
+    wait(app, 0.3)
+    press(app, key)
+    assert isinstance(app.scene, LevelScene) and app.scene.level is app.levels[2]
+
+
+def test_escape_on_result_works_at_once(app):
+    _finish_level(app, app.levels[1])
+    press(app, pygame.K_ESCAPE)
+    assert isinstance(app.scene, MenuScene)
+
+
 def type_text(app, text):
     frame(app, [pygame.event.Event(pygame.TEXTINPUT, text=ch) for ch in text])
 
@@ -543,18 +593,24 @@ def test_menu_has_no_esc_caption(app, monkeypatch):
 @pytest.mark.parametrize("size", [(800, 600), (1024, 768), (1792, 982)])
 @pytest.mark.parametrize("name", ["Тест", "Очень-очень-длин"])
 def test_menu_player_button_shows_name(app, size, name):
-    from globe_quiz.ui import draw_text, font
+    from globe_quiz.ui import draw_text
 
     app.players.players[name] = app.players.players.pop("Тест") if name != "Тест" else app.players.progress
     app.players.current = name
+    # Много звёзд — трёхзначное число на кнопке: по 3 звезды за каждый вопрос всех уровней.
+    for lv in app.levels:
+        app.progress.record(lv.key, 3 * min(8, len(lv.questions)), True, None)
+    total = sum(app.progress.best.values())
+    assert total >= 100
     surf = pygame.display.set_mode(size)
     try:
         app.switch(MenuScene(app))
         app.scene.layout(size)
         s = app.scene.s
         btn, back = app.scene.btn_player, app.scene.btn_back
-        assert btn.text == name
-        assert font(int(28 * s)).size(name)[0] < btn.rect.width  # имя целиком
+        assert btn.text == name and btn.stars == total
+        assert btn.content_width(int(28 * s)) < btn.rect.width  # имя и звёзды целиком
+        assert btn.fit_size(int(28 * s)) == int(28 * s)  # в меню шрифт не уменьшается
         assert surf.get_rect().contains(btn.rect) and not btn.rect.colliderect(back.rect)
         title = draw_text(pygame.Surface(size), "Выбери уровень", int(72 * s), (255, 255, 255), (size[0] // 2, int(75 * s)))
         assert not title.colliderect(btn.rect) and not title.colliderect(back.rect)
@@ -607,6 +663,51 @@ def test_first_run_has_no_back(fresh_app):
     click(app, scene.btn_back.rect.center)
     press(app, pygame.K_ESCAPE)
     assert app.scene is scene and scene.entering  # остались на вводе имени
+
+
+def test_players_screen_shows_each_players_stars(app):
+    from globe_quiz.scenes.players import PlayersScene
+
+    app.players.add("Маша")
+    app.players.progress.record("continents", 18, True, "oceans")
+    app.players.progress.record("oceans", 12, True, "poles_equator")
+    app.players.progress.record("poles_equator", 15, True, "islands")
+    app.players.add("Петя")
+    app.players.progress.record("continents", 12, False, "oceans")
+    app.players.progress.best["removed_level"] = 30  # уровня больше нет — не считается
+    app.switch(PlayersScene(app))
+    frame(app)
+    stars = {b.text: b.stars for b in app.scene.player_buttons}
+    assert stars == {"Тест": 0, "Маша": 45, "Петя": 12}
+
+
+def test_new_player_has_zero_stars_in_menu(app):
+    from globe_quiz.scenes.players import PlayersScene
+
+    app.switch(PlayersScene(app))
+    frame(app)
+    click(app, app.scene.btn_new.rect.center)
+    type_text(app, "Оля")
+    press(app, pygame.K_RETURN)
+    assert isinstance(app.scene, MenuScene)
+    frame(app)
+    assert app.scene.btn_player.text == "Оля" and app.scene.btn_player.stars == 0
+    pygame.key.stop_text_input()
+
+
+def test_menu_stars_grow_after_level(app):
+    app.progress.record("oceans", 10, True, "poles_equator")
+    app.switch(MenuScene(app))
+    frame(app)
+    before = app.scene.btn_player.stars
+    assert before == 10
+    result = _finish_level(app, app.levels[1])  # «Океаны» без ошибок
+    gained = result.stars - 10
+    assert gained > 0
+    click(app, result.btn_menu.rect.center)
+    assert isinstance(app.scene, MenuScene)
+    frame(app)
+    assert app.scene.btn_player.stars == before + gained
 
 
 def test_switch_player_renames_menu_button(app):

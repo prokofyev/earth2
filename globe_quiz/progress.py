@@ -42,6 +42,10 @@ class Progress:
     def best_for(self, key: str) -> int:
         return self.best.get(key, 0)
 
+    def total_stars(self, keys) -> int:
+        """Сумма лучших результатов по уровням, которые сейчас есть в игре (их ключи — keys)."""
+        return sum(self.best.get(key, 0) for key in keys)
+
     def record(self, key: str, stars: int, passed: bool, next_key: str | None) -> None:
         """Записать завершённый проход уровня; при прохождении открыть следующий."""
         self.best[key] = max(self.best.get(key, 0), stars)

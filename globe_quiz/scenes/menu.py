@@ -1,4 +1,4 @@
-"""Меню уровней на фоне вращающейся Земли: карточки, «‹ Выход» и кнопка с именем игрока."""
+"""Меню уровней на фоне вращающейся Земли: карточки, «‹ Выход» и кнопка с именем и звёздами игрока."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pygame
 from ..app import Scene
 from ..quiz import MAX_QUESTIONS, previous_level
 from ..ui import (ACCENT, BAD, PANEL, PANEL_EDGE, STAR_EMPTY, TEXT, TEXT_DIM, Button, back_button,
-                  draw_back_button, draw_lock, draw_panel, draw_star, draw_text, font, place_back_button,
+                  draw_back_button, draw_lock, draw_panel, draw_star, draw_text, place_back_button,
                   ui_scale)
 
 
@@ -57,9 +57,10 @@ class MenuScene(Scene):
         globe_top = int(120 * s)  # глобус ниже заголовка, чтобы тот читался
         self.app.globe.set_rect(pygame.Rect(0, globe_top, w, h - globe_top))
         place_back_button(self.btn_back, s)
-        # Кнопка игрока — по ширине имени, но не уже кнопки «назад».
+        # Кнопка игрока — имя и сумма звёзд; по ширине надписи, но не уже кнопки «назад».
         self.btn_player.text = self.app.players.current or ""
-        text_w = font(int(28 * s)).size(self.btn_player.text)[0]
+        self.btn_player.stars = self.app.progress.total_stars(lv.key for lv in levels)
+        text_w = self.btn_player.content_width(int(28 * s))
         self.btn_player.rect = pygame.Rect(0, 0, max(int(190 * s), text_w + int(48 * s)), int(56 * s))
         self.btn_player.rect.topright = (w - int(20 * s), int(20 * s))
 

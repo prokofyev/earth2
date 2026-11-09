@@ -62,6 +62,25 @@ def test_progress_follows_level_names_not_numbers():
     assert p.is_unlocked(moved) and p.best_for(moved.key) == 20
 
 
+ALL_KEYS = [lv.key for lv in LEVELS]
+
+
+def test_total_stars_sums_best_results():
+    p = Progress()
+    assert p.total_stars(ALL_KEYS) == 0  # новый игрок
+    p.record("continents", 18, True, "oceans")
+    p.record("oceans", 12, True, "poles_equator")
+    p.record("poles_equator", 21, True, "islands")
+    assert p.total_stars(ALL_KEYS) == 51
+    p.record("continents", 15, True, "oceans")  # худший повтор не прибавляет
+    assert p.total_stars(ALL_KEYS) == 51
+
+
+def test_total_stars_ignores_removed_levels():
+    p = Progress(best={"continents": 18, "old_removed_level": 40})
+    assert p.total_stars(ALL_KEYS) == 18
+
+
 def test_each_player_has_own_progress():
     players = Players()
     players.add("Маша")
